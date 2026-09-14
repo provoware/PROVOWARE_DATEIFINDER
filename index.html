@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>DateiFinder</title>
+  </head>
+  <body data-theme="cyan">
+    <div id="app" class="app-shell">
+      <aside class="sidebar" aria-label="Hauptnavigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">⌕</div>
+          <div><strong>DateiFinder</strong><span>Einfach. Schnell. Sicher.</span></div>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item is-active" type="button" aria-current="page"><span class="nav-icon">⌕</span><span><strong>Suche</strong><small>Dateien finden</small></span></button>
+          <button id="choose-source-nav" class="nav-item" type="button"><span class="nav-icon">📁</span><span><strong>Orte</strong><small id="source-label">Ordner wählen</small></span></button>
+          <button class="nav-item" type="button" disabled><span class="nav-icon">📄</span><span><strong>Dateitypen</strong><small>folgt in V0.2</small></span></button>
+          <button class="nav-item" type="button" disabled><span class="nav-icon">★</span><span><strong>Favoriten</strong><small>folgt in V0.2</small></span></button>
+          <button class="nav-item" type="button" disabled><span class="nav-icon">◷</span><span><strong>Verlauf</strong><small>folgt in V0.2</small></span></button>
+          <button class="nav-item" type="button" disabled><span class="nav-icon">⚙</span><span><strong>Einstellungen</strong><small>folgt in V0.2</small></span></button>
+        </nav>
+        <p class="sidebar-claim" aria-hidden="true">Deine Dateien.<br />Deine Kontrolle.</p>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar" data-tauri-drag-region>
+          <div data-tauri-drag-region>
+            <h1>Dateinamen durchsuchen</h1>
+            <p>Ein oder mehrere Wörter eingeben und deine Dateien finden.</p>
+          </div>
+          <div class="topbar-actions">
+            <button id="mobile-source-button" class="window-button mobile-only" type="button" aria-label="Suchquelle wählen" title="Suchquelle wählen">📁</button>
+            <label class="theme-picker"><span class="sr-only">Farbschema</span><select id="theme-select" aria-label="Farbschema"><option value="cyan">Cyan</option><option value="purple">Violett</option><option value="green">Grün</option><option value="orange">Orange</option></select></label>
+            <button id="window-minimize" class="window-button desktop-only" type="button" aria-label="Fenster minimieren">−</button>
+            <button id="window-maximize" class="window-button desktop-only" type="button" aria-label="Fenster maximieren">□</button>
+            <button id="window-close" class="window-button desktop-only" type="button" aria-label="Fenster schließen">×</button>
+          </div>
+        </header>
+
+        <section class="content-grid">
+          <div class="main-column">
+            <section class="panel search-panel" aria-labelledby="search-heading">
+              <h2 id="search-heading" class="sr-only">Suche</h2>
+              <form id="search-form" class="search-row">
+                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" value="urlaub 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" /></label>
+                <button id="search-button" class="primary-button" type="submit">Suchen</button>
+              </form>
+              <div class="chips" aria-label="Schnellfilter">
+                <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button type="button" data-query-chip="+">+</button><button type="button" class="options-chip" disabled>☷ Optionen</button>
+              </div>
+            </section>
+
+            <section class="panel results-panel" aria-labelledby="results-title">
+              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" disabled>■</button></div></div>
+              <div id="results-list" class="results-list" aria-label="Gefundene Dateien"></div>
+              <div id="empty-state" class="empty-state"><strong>Noch kein Suchort gewählt.</strong><span>Wähle links unter „Orte“ zuerst einen Ordner.</span></div>
+            </section>
+          </div>
+
+          <aside class="panel preview-panel" aria-labelledby="preview-title">
+            <div class="panel-heading"><h2 id="preview-title"><span class="accent-dot"></span> Vorschau</h2></div>
+            <div id="preview-visual" class="preview-visual" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
+            <div id="preview-content" class="preview-content"><strong id="preview-name">Keine Datei ausgewählt</strong><span id="preview-summary">–</span><dl><div><dt>Pfad:</dt><dd id="preview-path">–</dd></div><div><dt>Größe:</dt><dd id="preview-size">–</dd></div><div><dt>Geändert:</dt><dd id="preview-modified">–</dd></div><div><dt>Typ:</dt><dd id="preview-kind">–</dd></div></dl></div>
+          </aside>
+        </section>
+
+        <footer class="actionbar">
+          <div class="status-block"><span id="status-icon" class="status-icon" aria-hidden="true">✓</span><span><strong id="status-title">Bereit</strong><small id="status-detail">Wähle einen Suchort.</small></span></div>
+          <div class="footer-actions"><button id="open-selected" type="button" disabled>📂 Ausgewählte öffnen</button><button id="reveal-selected" type="button" disabled>▣ In Ordner zeigen</button><button id="export-results" type="button" disabled>💾 Liste speichern …</button></div>
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
