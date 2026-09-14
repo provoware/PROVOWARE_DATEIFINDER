@@ -1,0 +1,55 @@
+name: lock-bootstrap
+
+on:
+  push:
+    branches:
+      - feat/tauri2-foundation
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lock-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lockfiles:
+    name: Generate lockfiles once
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+
+      - name: Set up exact Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+
+      - name: Generate npm lockfile without lifecycle scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Generate Cargo lockfile
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
+
+      - name: Commit deterministic lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add package-lock.json src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build: lock frontend and Rust dependencies"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
