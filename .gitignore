@@ -12,3 +12,4 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+blob-report/
