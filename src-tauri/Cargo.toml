@@ -1,0 +1,22 @@
+[package]
+name = "provoware-dateifinder"
+version = "0.1.0"
+description = "PROVOWARE DateiFinder"
+authors = ["PROVOWARE"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "provoware_dateifinder_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = "=2.6.3"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = "=2.11.5"
+tauri-plugin-dialog = "=2.7.3"
+tauri-plugin-opener = "=2.5.5"
+tauri-plugin-store = "=2.4.4"

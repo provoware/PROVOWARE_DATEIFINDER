@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "mobile-main",
+  "description": "Minimale Mobile-Rechte; Dateiquellen werden bewusst vom Nutzer freigegeben.",
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "iOS",
+    "android"
+  ],
+  "permissions": [
+    "core:event:default",
+    "dialog:allow-open",
+    "store:allow-load",
+    "store:allow-get-store",
+    "store:allow-get",
+    "store:allow-set",
+    "store:allow-save"
+  ]
+}
