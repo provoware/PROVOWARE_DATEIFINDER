@@ -496,25 +496,6 @@ async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, Stri
         .map_err(|error| format!("Liste konnte nicht gespeichert werden: {error}"))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{classify, matches_name, normalize_query};
-
-    #[test]
-    fn tokenizes_and_matches_all_terms() {
-        let tokens = normalize_query("Urlaub 2025");
-        assert!(matches_name("Urlaub_2025_Berlin.jpg", &tokens));
-        assert!(!matches_name("Urlaub_Berlin.jpg", &tokens));
-    }
-
-    #[test]
-    fn classification_is_case_insensitive() {
-        assert_eq!(classify("JPG"), "image");
-        assert_eq!(classify("Pdf"), "document");
-        assert_eq!(classify("MP3"), "audio");
-    }
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -534,4 +515,23 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("DateiFinder konnte nicht gestartet werden");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify, matches_name, normalize_query};
+
+    #[test]
+    fn tokenizes_and_matches_all_terms() {
+        let tokens = normalize_query("Urlaub 2025");
+        assert!(matches_name("Urlaub_2025_Berlin.jpg", &tokens));
+        assert!(!matches_name("Urlaub_Berlin.jpg", &tokens));
+    }
+
+    #[test]
+    fn classification_is_case_insensitive() {
+        assert_eq!(classify("JPG"), "image");
+        assert_eq!(classify("Pdf"), "document");
+        assert_eq!(classify("MP3"), "audio");
+    }
 }
