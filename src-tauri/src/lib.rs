@@ -269,12 +269,6 @@ fn start_search(
 
         while let Some(directory) = queue.pop_front() {
             if cancelled.load(Ordering::Relaxed) {
-                let _ = app_for_thread.emit(
-                    "search-cancelled",
-                    SearchCancelledPayload {
-                        session_id: id_for_thread.clone(),
-                    },
-                );
                 break;
             }
 
@@ -365,7 +359,14 @@ fn start_search(
             }
         }
 
-        if !cancelled.load(Ordering::Relaxed) {
+        if cancelled.load(Ordering::Relaxed) {
+            let _ = app_for_thread.emit(
+                "search-cancelled",
+                SearchCancelledPayload {
+                    session_id: id_for_thread.clone(),
+                },
+            );
+        } else {
             if !batch.is_empty() {
                 let _ = app_for_thread.emit(
                     "search-batch",
