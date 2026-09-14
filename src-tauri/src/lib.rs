@@ -116,8 +116,14 @@ fn stable_id(path: &Path) -> String {
 }
 
 fn file_entry(path: &Path, metadata: &fs::Metadata) -> FileEntry {
-    let display_name = path.file_name().map(|v| v.to_string_lossy().into_owned()).unwrap_or_default();
-    let extension = path.extension().map(|v| v.to_string_lossy().into_owned()).unwrap_or_default();
+    let display_name = path
+        .file_name()
+        .map(|v| v.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let extension = path
+        .extension()
+        .map(|v| v.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let modified_at = metadata
         .modified()
         .ok()
@@ -136,8 +142,12 @@ fn file_entry(path: &Path, metadata: &fs::Metadata) -> FileEntry {
 }
 
 fn canonical_child(root: &Path, child: &Path) -> Result<PathBuf, String> {
-    let root = root.canonicalize().map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
-    let child = child.canonicalize().map_err(|error| format!("Datei ist nicht verfügbar: {error}"))?;
+    let root = root
+        .canonicalize()
+        .map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
+    let child = child
+        .canonicalize()
+        .map_err(|error| format!("Datei ist nicht verfügbar: {error}"))?;
     if !child.starts_with(&root) {
         return Err("Die Datei liegt außerhalb des freigegebenen Suchorts.".into());
     }
@@ -261,7 +271,9 @@ fn start_search(
             if cancelled.load(Ordering::Relaxed) {
                 let _ = app_for_thread.emit(
                     "search-cancelled",
-                    SearchCancelledPayload { session_id: id_for_thread.clone() },
+                    SearchCancelledPayload {
+                        session_id: id_for_thread.clone(),
+                    },
                 );
                 break;
             }
