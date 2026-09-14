@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PROVOWARE DateiFinder",
+  "version": "0.1.0",
+  "identifier": "de.provoware.dateifinder",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "DateiFinder",
+        "width": 768,
+        "height": 512,
+        "minWidth": 768,
+        "minHeight": 512,
+        "resizable": true,
+        "decorations": false,
+        "transparent": false,
+        "center": true,
+        "backgroundColor": "#03171e"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost",
+      "capabilities": [
+        "desktop-main",
+        "mobile-main"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Dateinamen lokal durchsuchen",
+    "longDescription": "Ein lokaler, portabler Dateifinder für Desktop und Mobile."
+  }
+}
