@@ -1,0 +1,26 @@
+{
+  "name": "provoware-dateifinder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PROVOWARE DateiFinder - local filename search with Tauri 2",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --host 127.0.0.1 --port 1420",
+    "tauri": "tauri",
+    "check": "npm run typecheck && npm run build"
+  },
+  "engines": { "node": ">=20.19.0" },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-dialog": "2.7.3",
+    "@tauri-apps/plugin-store": "2.4.4"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}
