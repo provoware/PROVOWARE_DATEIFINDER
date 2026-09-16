@@ -17,7 +17,7 @@ env:
 
 jobs:
   hardening:
-    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> G4 -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
+    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> G4 -> STRESS -> G5 -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -32,6 +32,7 @@ jobs:
         id: scope
         env:
           G4_TESTABILITY_SCOPE: '1'
+          G5_SECURITY_SCOPE: '1'
         run: node tests/hardening/scope-guard.mjs
 
       - name: G10a - establish evidence identity
@@ -128,12 +129,12 @@ jobs:
         id: stress
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
 
-      - name: SECURITY - path escape symlink and export bounds
-        id: security
-        run: |
-          cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_accepts_real_child_and_rejects_outside_file
-          cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_rejects_symlink_escape
-          cargo test --locked --manifest-path src-tauri/Cargo.toml export_rejects_oversized_total_payload_before_allocation
+      - name: G5 - security edge cases
+        id: g5_security
+        timeout-minutes: 3
+        env:
+          RUSTFLAGS: --cfg g5_contract
+        run: timeout --signal=TERM --kill-after=10s 120s cargo test --locked --manifest-path src-tauri/Cargo.toml --test g5_security g5_ -- --nocapture
 
       - name: Install exact Chromium runtime
         run: npx playwright install --with-deps chromium
@@ -161,7 +162,7 @@ jobs:
           TIEF_OUTCOME: ${{ steps.tief.outcome }}
           G4_OUTCOME: ${{ steps.g4.outcome }}
           STRESS_OUTCOME: ${{ steps.stress.outcome }}
-          SECURITY_OUTCOME: ${{ steps.security.outcome }}
+          G5_SECURITY_OUTCOME: ${{ steps.g5_security.outcome }}
           UI_STATIC_OUTCOME: ${{ steps.ui_static.outcome }}
           LAYOUT_200_OUTCOME: ${{ steps.layout_200.outcome }}
           GOLDEN_OUTCOME: ${{ steps.golden.outcome }}
@@ -185,7 +186,7 @@ jobs:
             echo "- TIEF: ${TIEF_OUTCOME:-not_run}"
             echo "- G4 real filesystem traversal stress: ${G4_OUTCOME:-not_run}"
             echo "- STRESS: ${STRESS_OUTCOME:-not_run}"
-            echo "- SECURITY: ${SECURITY_OUTCOME:-not_run}"
+            echo "- G5 security edge cases: ${G5_SECURITY_OUTCOME:-not_run}"
             echo "- UI static acceptance: ${UI_STATIC_OUTCOME:-not_run}"
             echo "- 200%-LAYOUT: ${LAYOUT_200_OUTCOME:-not_run}"
             echo "- GOLDEN: ${GOLDEN_OUTCOME:-not_run}"
