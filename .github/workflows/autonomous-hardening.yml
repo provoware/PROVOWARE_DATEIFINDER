@@ -67,7 +67,7 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml
 
       - name: STRESS - 100000 matcher cases
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml matcher_stays_stable_under_large_input_volume -- --exact
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
 
       - name: SECURITY - path escape symlink and export bounds
         run: |
