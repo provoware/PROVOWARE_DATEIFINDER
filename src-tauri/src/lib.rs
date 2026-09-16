@@ -14,6 +14,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
+const MAX_EXPORT_LINES: usize = 250_000;
+const MAX_EXPORT_LINE_BYTES: usize = 32_768;
+const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
+const PROGRESS_INTERVAL: usize = 250;
+
 #[derive(Clone, Default)]
 pub struct SearchRegistry(pub Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
 
@@ -154,6 +159,32 @@ fn canonical_child(root: &Path, child: &Path) -> Result<PathBuf, String> {
     Ok(child)
 }
 
+fn should_emit_progress(scanned_count: usize, last_progress: usize) -> bool {
+    scanned_count.saturating_sub(last_progress) >= PROGRESS_INTERVAL
+}
+
+fn validate_export_lines(lines: &[String]) -> Result<usize, String> {
+    if lines.len() > MAX_EXPORT_LINES {
+        return Err("Zu viele Zeilen für einen einzelnen Export.".into());
+    }
+
+    let mut total_bytes = 0usize;
+    for line in lines {
+        let line_bytes = line.len();
+        if line_bytes > MAX_EXPORT_LINE_BYTES {
+            return Err("Eine Exportzeile ist ungewöhnlich groß.".into());
+        }
+        total_bytes = total_bytes
+            .checked_add(line_bytes.saturating_add(1))
+            .ok_or_else(|| "Die Exportgröße ist zu groß.".to_string())?;
+        if total_bytes > MAX_EXPORT_TOTAL_BYTES {
+            return Err("Die Trefferliste ist für einen einzelnen Export zu groß.".into());
+        }
+    }
+
+    Ok(total_bytes)
+}
+
 #[tauri::command]
 fn platform_capabilities() -> PlatformCapabilities {
     let mobile = cfg!(any(target_os = "android", target_os = "ios"));
@@ -260,7 +291,7 @@ fn start_search(
 
     std::thread::spawn(move || {
         let started = Instant::now();
-        let mut queue = VecDeque::from([root]);
+        let mut queue = VecDeque::from([canonical_root]);
         let mut batch = Vec::with_capacity(batch_size);
         let mut scanned_count = 0usize;
         let mut result_count = 0usize;
@@ -294,6 +325,17 @@ fn start_search(
                 };
 
                 scanned_count += 1;
+                if should_emit_progress(scanned_count, last_progress) {
+                    last_progress = scanned_count;
+                    let _ = app_for_thread.emit(
+                        "search-progress",
+                        SearchProgressPayload {
+                            session_id: id_for_thread.clone(),
+                            scanned_count,
+                        },
+                    );
+                }
+
                 let file_type = match entry.file_type() {
                     Ok(kind) => kind,
                     Err(_) => {
@@ -316,16 +358,6 @@ fn start_search(
 
                 let name = entry.file_name().to_string_lossy().into_owned();
                 if !matches_name(&name, &tokens) {
-                    if scanned_count.saturating_sub(last_progress) >= 250 {
-                        last_progress = scanned_count;
-                        let _ = app_for_thread.emit(
-                            "search-progress",
-                            SearchProgressPayload {
-                                session_id: id_for_thread.clone(),
-                                scanned_count,
-                            },
-                        );
-                    }
                     continue;
                 }
 
@@ -359,6 +391,18 @@ fn start_search(
             }
         }
 
+        if !batch.is_empty() {
+            let items = std::mem::take(&mut batch);
+            let _ = app_for_thread.emit(
+                "search-batch",
+                SearchBatchPayload {
+                    session_id: id_for_thread.clone(),
+                    items,
+                    scanned_count,
+                },
+            );
+        }
+
         if cancelled.load(Ordering::Relaxed) {
             let _ = app_for_thread.emit(
                 "search-cancelled",
@@ -367,16 +411,6 @@ fn start_search(
                 },
             );
         } else {
-            if !batch.is_empty() {
-                let _ = app_for_thread.emit(
-                    "search-batch",
-                    SearchBatchPayload {
-                        session_id: id_for_thread.clone(),
-                        items: batch,
-                        scanned_count,
-                    },
-                );
-            }
             let _ = app_for_thread.emit(
                 "search-finished",
                 SearchFinishedPayload {
@@ -462,12 +496,7 @@ fn reveal_file(
 
 #[tauri::command]
 async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, String> {
-    if lines.len() > 250_000 {
-        return Err("Zu viele Zeilen für einen einzelnen Export.".into());
-    }
-    if lines.iter().any(|line| line.len() > 32_768) {
-        return Err("Eine Exportzeile ist ungewöhnlich groß.".into());
-    }
+    let total_bytes = validate_export_lines(&lines)?;
 
     let selected = app
         .dialog()
@@ -485,7 +514,9 @@ async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, Stri
         .into_path()
         .map_err(|error| format!("Exportziel ist kein lokaler Pfad: {error}"))?;
 
-    let mut text = String::from("DateiFinder Trefferliste\n======================\n");
+    let header = "DateiFinder Trefferliste\n======================\n";
+    let mut text = String::with_capacity(header.len().saturating_add(total_bytes));
+    text.push_str(header);
     for line in lines {
         text.push_str(&line);
         text.push('\n');
@@ -519,7 +550,21 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, matches_name, normalize_query};
+    use super::{
+        canonical_child, classify, matches_name, normalize_query, should_emit_progress,
+        validate_export_lines, MAX_EXPORT_TOTAL_BYTES,
+    };
+    use std::{fs, path::PathBuf, time::SystemTime};
+
+    fn temp_test_dir(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("dateifinder-{name}-{nonce}"));
+        fs::create_dir_all(&path).expect("create temp test dir");
+        path
+    }
 
     #[test]
     fn tokenizes_and_matches_all_terms() {
@@ -529,9 +574,78 @@ mod tests {
     }
 
     #[test]
+    fn matcher_stays_stable_under_large_input_volume() {
+        let tokens = normalize_query("urlaub 2025");
+        let matches = (0..100_000)
+            .filter(|index| matches_name(&format!("urlaub_2025_{index}.jpg"), &tokens))
+            .count();
+        assert_eq!(matches, 100_000);
+    }
+
+    #[test]
     fn classification_is_case_insensitive() {
         assert_eq!(classify("JPG"), "image");
         assert_eq!(classify("Pdf"), "document");
         assert_eq!(classify("MP3"), "audio");
+    }
+
+    #[test]
+    fn progress_is_independent_from_match_outcome() {
+        assert!(!should_emit_progress(249, 0));
+        assert!(should_emit_progress(250, 0));
+        assert!(should_emit_progress(500, 250));
+        assert!(!should_emit_progress(499, 250));
+    }
+
+    #[test]
+    fn canonical_child_accepts_real_child_and_rejects_outside_file() {
+        let root = temp_test_dir("canonical-root");
+        let inside = root.join("inside.txt");
+        fs::write(&inside, b"ok").expect("write inside");
+
+        let outside_dir = temp_test_dir("canonical-outside");
+        let outside = outside_dir.join("outside.txt");
+        fs::write(&outside, b"no").expect("write outside");
+
+        assert_eq!(
+            canonical_child(&root, &inside).expect("inside allowed"),
+            inside.canonicalize().expect("canonical inside")
+        );
+        assert!(canonical_child(&root, &outside).is_err());
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_child_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_test_dir("symlink-root");
+        let outside_dir = temp_test_dir("symlink-outside");
+        let outside = outside_dir.join("secret.txt");
+        fs::write(&outside, b"secret").expect("write outside");
+        let link = root.join("escape.txt");
+        symlink(&outside, &link).expect("create symlink");
+
+        assert!(canonical_child(&root, &link).is_err());
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside_dir);
+    }
+
+    #[test]
+    fn export_rejects_oversized_total_payload_before_allocation() {
+        let line = "x".repeat(32_000);
+        let count = (MAX_EXPORT_TOTAL_BYTES / (line.len() + 1)) + 2;
+        let lines = vec![line; count];
+        assert!(validate_export_lines(&lines).is_err());
+    }
+
+    #[test]
+    fn export_accepts_reasonable_payload() {
+        let lines = vec!["a\tb\t1".to_string(), "c\td\t2".to_string()];
+        assert_eq!(validate_export_lines(&lines).expect("valid export"), 12);
     }
 }
