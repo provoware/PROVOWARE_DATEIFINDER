@@ -31,19 +31,25 @@ for (const theme of themes) {
 }
 
 test("200-percent zoom equivalent keeps critical controls reachable", async ({ page }) => {
-  await page.setViewportSize({ width: 1536, height: 1024 });
+  // A 768x512 native window at 200% browser/WebView zoom exposes roughly a
+  // 384x256 logical CSS viewport. Modelling that viewport exercises the same
+  // responsive breakpoints without the artificial 100vw expansion caused by
+  // CSS `zoom`.
+  await page.setViewportSize({ width: 384, height: 256 });
   await page.goto("/");
-  await page.locator("body").evaluate((body) => {
-    (body as HTMLElement).style.zoom = "2";
-  });
+
+  const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(horizontalOverflow).toBeLessThanOrEqual(0);
 
   for (const selector of ["#query-input", "#search-button", "#theme-select", ".actionbar"]) {
-    const box = await page.locator(selector).boundingBox();
+    const control = page.locator(selector);
+    await control.scrollIntoViewIfNeeded();
+    const box = await control.boundingBox();
     expect(box, `${selector} missing`).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.y).toBeGreaterThanOrEqual(0);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(1536);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(1024);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(384);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(256);
   }
 });
 
