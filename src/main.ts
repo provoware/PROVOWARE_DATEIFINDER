@@ -89,10 +89,10 @@ const initialState: AppState = {
   theme: "cyan",
   platform: {
     platform: "unknown",
-    canPickFolder: true,
-    canOpenFile: true,
-    canRevealFile: true,
-    canSearchRecursively: true,
+    canPickFolder: false,
+    canOpenFile: false,
+    canRevealFile: false,
+    canSearchRecursively: false,
     supportsPickedFiles: false,
   },
 };
@@ -458,6 +458,7 @@ async function initialize(): Promise<void> {
     state.platform = await getPlatformCapabilities();
   } catch (error) {
     console.error("Platform capabilities unavailable", error);
+    setStatus("Systemfunktionen nicht verfügbar", "Dateizugriffe bleiben aus Sicherheitsgründen deaktiviert.", "error");
   }
 
   const storedTheme = await loadTheme().catch(() => null);
