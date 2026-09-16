@@ -18,6 +18,12 @@ if (process.env.G4_TESTABILITY_SCOPE === "1") {
   allowed.push(/^src-tauri\/src\/lib\.rs$/u);
 }
 
+// G5 remains test-only. Its opt-in exception is intentionally exact and does
+// not authorize any production source path.
+if (process.env.G5_SECURITY_SCOPE === "1") {
+  allowed.push(/^src-tauri\/tests\/g5_security\.rs$/u);
+}
+
 const output = execFileSync(
   "git",
   ["diff", "--name-only", `${contractSha}...HEAD`],
@@ -34,6 +40,7 @@ const forbidden = changed.filter((path) => !allowed.some((pattern) => pattern.te
 console.log(`G0 base: ${contractSha}`);
 console.log(`G0 head: ${execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()}`);
 console.log(`G0 G4 testability scope: ${process.env.G4_TESTABILITY_SCOPE === "1" ? "enabled (src-tauri/src/lib.rs only)" : "disabled"}`);
+console.log(`G0 G5 security scope: ${process.env.G5_SECURITY_SCOPE === "1" ? "enabled (src-tauri/tests/g5_security.rs only)" : "disabled"}`);
 console.log(`G0 changed files: ${changed.length}`);
 for (const path of changed) console.log(` - ${path}`);
 
