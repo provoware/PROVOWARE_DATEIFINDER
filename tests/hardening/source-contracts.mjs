@@ -36,8 +36,12 @@ test("Rust search hard limits remain explicit", () => {
 });
 
 test("search progress is independent of match branch", () => {
-  const progressIndex = rust.indexOf("should_emit_progress(scanned_count, last_progress)");
-  const matchIndex = rust.indexOf("if !matches_name(&name, &tokens)");
+  const traversalStart = rust.indexOf("fn traverse_filesystem<");
+  const traversalEnd = rust.indexOf("fn validate_export_lines", traversalStart);
+  assert.ok(traversalStart > 0 && traversalEnd > traversalStart, "traverse_filesystem body missing");
+  const traversal = rust.slice(traversalStart, traversalEnd);
+  const progressIndex = traversal.indexOf("should_emit_progress(scanned_count, last_progress)");
+  const matchIndex = traversal.indexOf("if !matches_name(&name, tokens)");
   assert.ok(progressIndex > 0 && matchIndex > 0 && progressIndex < matchIndex);
 });
 
