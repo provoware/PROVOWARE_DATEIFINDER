@@ -17,7 +17,7 @@ env:
 
 jobs:
   hardening:
-    name: G0 -> G10a -> SCHNELL -> TIEF -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
+    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -105,6 +105,10 @@ jobs:
           node --test tests/hardening/source-contracts.mjs
           npm run typecheck
 
+      - name: G3 - session restart stale-event race contract
+        id: g3_race
+        run: node --test tests/hardening/g3-session-race.mjs
+
       - name: TIEF - build fmt clippy and complete Rust suite
         id: tief
         run: |
@@ -146,6 +150,7 @@ jobs:
           SCOPE_OUTCOME: ${{ steps.scope.outcome }}
           IDENTITY_OUTCOME: ${{ steps.evidence_identity.outcome }}
           SCHNELL_OUTCOME: ${{ steps.schnell.outcome }}
+          G3_RACE_OUTCOME: ${{ steps.g3_race.outcome }}
           TIEF_OUTCOME: ${{ steps.tief.outcome }}
           STRESS_OUTCOME: ${{ steps.stress.outcome }}
           SECURITY_OUTCOME: ${{ steps.security.outcome }}
@@ -168,6 +173,7 @@ jobs:
             echo "- G0 scope: ${SCOPE_OUTCOME:-not_run}"
             echo "- G10a identity: ${IDENTITY_OUTCOME:-not_run}"
             echo "- SCHNELL: ${SCHNELL_OUTCOME:-not_run}"
+            echo "- G3 session race contract: ${G3_RACE_OUTCOME:-not_run}"
             echo "- TIEF: ${TIEF_OUTCOME:-not_run}"
             echo "- STRESS: ${STRESS_OUTCOME:-not_run}"
             echo "- SECURITY: ${SECURITY_OUTCOME:-not_run}"
