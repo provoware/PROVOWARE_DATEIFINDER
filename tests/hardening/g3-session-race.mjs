@@ -5,11 +5,22 @@ import path from "node:path";
 
 const source = fs.readFileSync(path.resolve("src/main.ts"), "utf8");
 
+function handlerStart(eventName) {
+  const patterns = [
+    `${eventName}(payload) {`,
+    `${eventName}: (payload) => {`,
+  ];
+  for (const pattern of patterns) {
+    const index = source.indexOf(pattern);
+    if (index !== -1) return index;
+  }
+  assert.fail(`missing ${eventName} handler`);
+}
+
 function handlerBody(eventName, nextName) {
-  const start = source.indexOf(`${eventName}: (payload) => {`);
-  assert.notEqual(start, -1, `missing ${eventName} handler`);
-  const end = source.indexOf(`${nextName}: (payload) => {`, start);
-  assert.notEqual(end, -1, `missing ${nextName} handler after ${eventName}`);
+  const start = handlerStart(eventName);
+  const end = handlerStart(nextName);
+  assert.ok(end > start, `missing ${nextName} handler after ${eventName}`);
   return source.slice(start, end);
 }
 
@@ -25,8 +36,7 @@ test("G3: every asynchronous search event rejects a stale session before state m
   const batch = handlerBody("onBatch", "onProgress");
   const progress = handlerBody("onProgress", "onFinished");
   const finished = handlerBody("onFinished", "onCancelled");
-  const cancelledStart = source.indexOf("onCancelled: (payload) => {");
-  assert.notEqual(cancelledStart, -1, "missing onCancelled handler");
+  const cancelledStart = handlerStart("onCancelled");
   const cancelled = source.slice(cancelledStart);
 
   assertStaleGuard(batch, "batch");
@@ -54,7 +64,7 @@ test("G3: restart cancels the previous active session before assigning a new ses
 
 test("G3: stale terminal events cannot clear the replacement session", () => {
   const finished = handlerBody("onFinished", "onCancelled");
-  const cancelledStart = source.indexOf("onCancelled: (payload) => {");
+  const cancelledStart = handlerStart("onCancelled");
   const cancelled = source.slice(cancelledStart);
 
   for (const [name, body] of [["finished", finished], ["cancelled", cancelled]]) {
