@@ -26,15 +26,19 @@ mod app_under_test {
     }
 
     pub(super) fn export_limits() -> (usize, usize, usize) {
-        (MAX_EXPORT_LINES, MAX_EXPORT_LINE_BYTES, MAX_EXPORT_TOTAL_BYTES)
+        (
+            MAX_EXPORT_LINES,
+            MAX_EXPORT_LINE_BYTES,
+            MAX_EXPORT_TOTAL_BYTES,
+        )
     }
 }
 
 #[cfg(test)]
 mod g5_security_tests {
     use super::app_under_test::{
-        canonical_child_probe, export_limits, validate_export_probe,
-        validated_allowed_file_probe, AllowedRoots,
+        canonical_child_probe, export_limits, validate_export_probe, validated_allowed_file_probe,
+        AllowedRoots,
     };
     use std::{
         fs,
@@ -152,12 +156,9 @@ mod g5_security_tests {
         register_root(&roots, &root.path);
         fs::remove_dir_all(&root.path).expect("remove registered root");
 
-        assert!(validated_allowed_file_probe(
-            &roots,
-            &as_text(&root.path),
-            &as_text(&child),
-        )
-        .is_err());
+        assert!(
+            validated_allowed_file_probe(&roots, &as_text(&root.path), &as_text(&child),).is_err()
+        );
     }
 
     #[cfg(unix)]
