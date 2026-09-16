@@ -152,7 +152,12 @@ mod g5_security_tests {
         register_root(&roots, &root.path);
         fs::remove_dir_all(&root.path).expect("remove registered root");
 
-        assert!(validated_allowed_file_probe(&roots, &as_text(&root.path), &as_text(&child)).is_err());
+        assert!(validated_allowed_file_probe(
+            &roots,
+            &as_text(&root.path),
+            &as_text(&child),
+        )
+        .is_err());
     }
 
     #[cfg(unix)]
