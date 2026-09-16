@@ -757,7 +757,9 @@ mod tests {
             .collect();
         assert_eq!(found_paths.len(), found.len());
         assert_eq!(found_paths, expected_matches);
-        assert!(found_paths.iter().all(|path| path.starts_with(&canonical_root)));
+        assert!(found_paths
+            .iter()
+            .all(|path| path.starts_with(&canonical_root)));
 
         #[cfg(unix)]
         if permission_case_active {
