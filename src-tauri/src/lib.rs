@@ -607,7 +607,10 @@ mod tests {
         let outside = outside_dir.join("outside.txt");
         fs::write(&outside, b"no").expect("write outside");
 
-        assert_eq!(canonical_child(&root, &inside).expect("inside allowed"), inside.canonicalize().expect("canonical inside"));
+        assert_eq!(
+            canonical_child(&root, &inside).expect("inside allowed"),
+            inside.canonicalize().expect("canonical inside")
+        );
         assert!(canonical_child(&root, &outside).is_err());
 
         let _ = fs::remove_dir_all(root);
