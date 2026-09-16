@@ -17,7 +17,7 @@ env:
 
 jobs:
   hardening:
-    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
+    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> G4 -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -30,6 +30,8 @@ jobs:
 
       - name: G0 - enforce iteration scope
         id: scope
+        env:
+          G4_TESTABILITY_SCOPE: '1'
         run: node tests/hardening/scope-guard.mjs
 
       - name: G10a - establish evidence identity
@@ -117,6 +119,11 @@ jobs:
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo test --locked --manifest-path src-tauri/Cargo.toml
 
+      - name: G4 - real filesystem traversal stress
+        id: g4
+        timeout-minutes: 3
+        run: timeout --signal=TERM --kill-after=10s 120s cargo test --locked --manifest-path src-tauri/Cargo.toml tests::real_filesystem_traversal_handles_large_tree_without_escape_or_duplicates -- --exact
+
       - name: STRESS - 100000 matcher cases
         id: stress
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
@@ -152,6 +159,7 @@ jobs:
           SCHNELL_OUTCOME: ${{ steps.schnell.outcome }}
           G3_RACE_OUTCOME: ${{ steps.g3_race.outcome }}
           TIEF_OUTCOME: ${{ steps.tief.outcome }}
+          G4_OUTCOME: ${{ steps.g4.outcome }}
           STRESS_OUTCOME: ${{ steps.stress.outcome }}
           SECURITY_OUTCOME: ${{ steps.security.outcome }}
           UI_STATIC_OUTCOME: ${{ steps.ui_static.outcome }}
@@ -175,6 +183,7 @@ jobs:
             echo "- SCHNELL: ${SCHNELL_OUTCOME:-not_run}"
             echo "- G3 session race contract: ${G3_RACE_OUTCOME:-not_run}"
             echo "- TIEF: ${TIEF_OUTCOME:-not_run}"
+            echo "- G4 real filesystem traversal stress: ${G4_OUTCOME:-not_run}"
             echo "- STRESS: ${STRESS_OUTCOME:-not_run}"
             echo "- SECURITY: ${SECURITY_OUTCOME:-not_run}"
             echo "- UI static acceptance: ${UI_STATIC_OUTCOME:-not_run}"

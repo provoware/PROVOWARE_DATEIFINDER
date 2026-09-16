@@ -89,6 +89,14 @@ pub struct PlatformCapabilities {
     pub supports_picked_files: bool,
 }
 
+#[derive(Debug)]
+struct TraversalOutcome {
+    scanned_count: usize,
+    result_count: usize,
+    skipped_count: usize,
+    cancelled: bool,
+}
+
 fn normalize_query(query: &str) -> Vec<String> {
     query
         .split_whitespace()
@@ -161,6 +169,119 @@ fn canonical_child(root: &Path, child: &Path) -> Result<PathBuf, String> {
 
 fn should_emit_progress(scanned_count: usize, last_progress: usize) -> bool {
     scanned_count.saturating_sub(last_progress) >= PROGRESS_INTERVAL
+}
+
+fn traverse_filesystem<FProgress, FBatch>(
+    canonical_root: PathBuf,
+    tokens: &[String],
+    batch_size: usize,
+    max_results: usize,
+    cancelled: &AtomicBool,
+    mut on_progress: FProgress,
+    mut on_batch: FBatch,
+) -> TraversalOutcome
+where
+    FProgress: FnMut(usize),
+    FBatch: FnMut(Vec<FileEntry>, usize),
+{
+    let mut queue = VecDeque::from([canonical_root]);
+    let mut batch = Vec::with_capacity(batch_size);
+    let mut scanned_count = 0usize;
+    let mut result_count = 0usize;
+    let mut skipped_count = 0usize;
+    let mut last_progress = 0usize;
+
+    while let Some(directory) = queue.pop_front() {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) => {
+                skipped_count += 1;
+                continue;
+            }
+        };
+
+        for entry in entries {
+            if cancelled.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            scanned_count += 1;
+            if should_emit_progress(scanned_count, last_progress) {
+                last_progress = scanned_count;
+                on_progress(scanned_count);
+            }
+
+            let file_type = match entry.file_type() {
+                Ok(kind) => kind,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            if file_type.is_symlink() {
+                skipped_count += 1;
+                continue;
+            }
+            if file_type.is_dir() {
+                queue.push_back(entry.path());
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !matches_name(&name, tokens) {
+                continue;
+            }
+
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            batch.push(file_entry(&entry.path(), &metadata));
+            result_count += 1;
+
+            if batch.len() >= batch_size {
+                let items = std::mem::take(&mut batch);
+                on_batch(items, scanned_count);
+            }
+
+            if result_count >= max_results {
+                queue.clear();
+                break;
+            }
+        }
+    }
+
+    if !batch.is_empty() {
+        let items = std::mem::take(&mut batch);
+        on_batch(items, scanned_count);
+    }
+
+    TraversalOutcome {
+        scanned_count,
+        result_count,
+        skipped_count,
+        cancelled: cancelled.load(Ordering::Relaxed),
+    }
 }
 
 fn validate_export_lines(lines: &[String]) -> Result<usize, String> {
@@ -291,119 +412,34 @@ fn start_search(
 
     std::thread::spawn(move || {
         let started = Instant::now();
-        let mut queue = VecDeque::from([canonical_root]);
-        let mut batch = Vec::with_capacity(batch_size);
-        let mut scanned_count = 0usize;
-        let mut result_count = 0usize;
-        let mut skipped_count = 0usize;
-        let mut last_progress = 0usize;
+        let outcome = traverse_filesystem(
+            canonical_root,
+            &tokens,
+            batch_size,
+            max_results,
+            &cancelled,
+            |scanned_count| {
+                let _ = app_for_thread.emit(
+                    "search-progress",
+                    SearchProgressPayload {
+                        session_id: id_for_thread.clone(),
+                        scanned_count,
+                    },
+                );
+            },
+            |items, scanned_count| {
+                let _ = app_for_thread.emit(
+                    "search-batch",
+                    SearchBatchPayload {
+                        session_id: id_for_thread.clone(),
+                        items,
+                        scanned_count,
+                    },
+                );
+            },
+        );
 
-        while let Some(directory) = queue.pop_front() {
-            if cancelled.load(Ordering::Relaxed) {
-                break;
-            }
-
-            let entries = match fs::read_dir(&directory) {
-                Ok(entries) => entries,
-                Err(_) => {
-                    skipped_count += 1;
-                    continue;
-                }
-            };
-
-            for entry in entries {
-                if cancelled.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                scanned_count += 1;
-                if should_emit_progress(scanned_count, last_progress) {
-                    last_progress = scanned_count;
-                    let _ = app_for_thread.emit(
-                        "search-progress",
-                        SearchProgressPayload {
-                            session_id: id_for_thread.clone(),
-                            scanned_count,
-                        },
-                    );
-                }
-
-                let file_type = match entry.file_type() {
-                    Ok(kind) => kind,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                if file_type.is_symlink() {
-                    skipped_count += 1;
-                    continue;
-                }
-                if file_type.is_dir() {
-                    queue.push_back(entry.path());
-                    continue;
-                }
-                if !file_type.is_file() {
-                    continue;
-                }
-
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if !matches_name(&name, &tokens) {
-                    continue;
-                }
-
-                let metadata = match entry.metadata() {
-                    Ok(metadata) => metadata,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                batch.push(file_entry(&entry.path(), &metadata));
-                result_count += 1;
-
-                if batch.len() >= batch_size {
-                    let items = std::mem::take(&mut batch);
-                    let _ = app_for_thread.emit(
-                        "search-batch",
-                        SearchBatchPayload {
-                            session_id: id_for_thread.clone(),
-                            items,
-                            scanned_count,
-                        },
-                    );
-                }
-
-                if result_count >= max_results {
-                    queue.clear();
-                    break;
-                }
-            }
-        }
-
-        if !batch.is_empty() {
-            let items = std::mem::take(&mut batch);
-            let _ = app_for_thread.emit(
-                "search-batch",
-                SearchBatchPayload {
-                    session_id: id_for_thread.clone(),
-                    items,
-                    scanned_count,
-                },
-            );
-        }
-
-        if cancelled.load(Ordering::Relaxed) {
+        if outcome.cancelled {
             let _ = app_for_thread.emit(
                 "search-cancelled",
                 SearchCancelledPayload {
@@ -415,9 +451,9 @@ fn start_search(
                 "search-finished",
                 SearchFinishedPayload {
                     session_id: id_for_thread.clone(),
-                    scanned_count,
-                    result_count,
-                    skipped_count,
+                    scanned_count: outcome.scanned_count,
+                    result_count: outcome.result_count,
+                    skipped_count: outcome.skipped_count,
                     duration_ms: started.elapsed().as_millis(),
                 },
             );
@@ -552,9 +588,15 @@ pub fn run() {
 mod tests {
     use super::{
         canonical_child, classify, matches_name, normalize_query, should_emit_progress,
-        validate_export_lines, MAX_EXPORT_TOTAL_BYTES,
+        traverse_filesystem, validate_export_lines, MAX_EXPORT_TOTAL_BYTES,
     };
-    use std::{fs, path::PathBuf, time::SystemTime};
+    use std::{
+        collections::HashSet,
+        fs,
+        path::{Path, PathBuf},
+        sync::atomic::AtomicBool,
+        time::SystemTime,
+    };
 
     fn temp_test_dir(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -564,6 +606,43 @@ mod tests {
         let path = std::env::temp_dir().join(format!("dateifinder-{name}-{nonce}"));
         fs::create_dir_all(&path).expect("create temp test dir");
         path
+    }
+
+    struct TempTree {
+        path: PathBuf,
+        restricted: Vec<PathBuf>,
+    }
+
+    impl TempTree {
+        fn new(name: &str) -> Self {
+            Self {
+                path: temp_test_dir(name),
+                restricted: Vec::new(),
+            }
+        }
+
+        #[cfg(unix)]
+        fn restrict(&mut self, path: &Path) {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(path, fs::Permissions::from_mode(0o000))
+                .expect("restrict fixture directory");
+            self.restricted.push(path.to_path_buf());
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                for path in &self.restricted {
+                    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
+                }
+            }
+            let _ = fs::remove_dir_all(&self.path);
+        }
     }
 
     #[test]
@@ -580,6 +659,114 @@ mod tests {
             .filter(|index| matches_name(&format!("urlaub_2025_{index}.jpg"), &tokens))
             .count();
         assert_eq!(matches, 100_000);
+    }
+
+    #[test]
+    fn real_filesystem_traversal_handles_large_tree_without_escape_or_duplicates() {
+        let mut root = TempTree::new("g4-root");
+        let outside = TempTree::new("g4-outside");
+        let canonical_root = root.path.canonicalize().expect("canonical fixture root");
+
+        let mut deep = root.path.clone();
+        for level in 0..6 {
+            deep = deep.join(format!("level-{level}"));
+            fs::create_dir_all(&deep).expect("create deep fixture path");
+        }
+
+        let mut buckets = Vec::new();
+        for bucket in 0..20 {
+            let path = deep.join(format!("bucket-{bucket:02}"));
+            fs::create_dir_all(&path).expect("create fixture bucket");
+            buckets.push(path);
+        }
+        fs::create_dir_all(root.path.join("empty-directory")).expect("create empty directory");
+
+        let mut expected_matches = HashSet::new();
+        for index in 0..10_000usize {
+            let directory = &buckets[index % buckets.len()];
+            let matching = index % 2 == 0;
+            let name = if index == 0 {
+                "ziel ünicode datei mit leerzeichen 00000.txt".to_string()
+            } else if matching {
+                format!("ziel_match_{index:05}.txt")
+            } else {
+                format!("other_{index:05}.txt")
+            };
+            let path = directory.join(name);
+            let contents: &[u8] = if index % 3 == 0 { b"" } else { b"x" };
+            fs::write(&path, contents).expect("write fixture file");
+            if matching {
+                expected_matches.insert(path);
+            }
+        }
+        assert_eq!(expected_matches.len(), 5_000);
+
+        let unreadable = root.path.join("permission-denied");
+        fs::create_dir_all(&unreadable).expect("create permission fixture");
+        fs::write(unreadable.join("other_hidden.txt"), b"hidden")
+            .expect("write permission fixture file");
+
+        #[cfg(unix)]
+        let permission_case_active = {
+            root.restrict(&unreadable);
+            match fs::read_dir(&unreadable) {
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => true,
+                other => {
+                    eprintln!("G4 permission-denied case unsupported for this runner: {other:?}");
+                    false
+                }
+            }
+        };
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            symlink(&root.path, deep.join("cycle-link")).expect("create cycle symlink");
+            fs::write(outside.path.join("ziel_outside_secret.txt"), b"outside")
+                .expect("write outside fixture");
+            symlink(&outside.path, deep.join("escape-link")).expect("create escape symlink");
+        }
+
+        let tokens = normalize_query("ziel");
+        let cancelled = AtomicBool::new(false);
+        let mut progress = Vec::new();
+        let mut found = Vec::new();
+        let outcome = traverse_filesystem(
+            canonical_root.clone(),
+            &tokens,
+            137,
+            250_000,
+            &cancelled,
+            |scanned_count| progress.push(scanned_count),
+            |items, _scanned_count| found.extend(items),
+        );
+
+        assert!(!outcome.cancelled);
+        assert!(outcome.scanned_count >= 10_000);
+        assert_eq!(outcome.result_count, expected_matches.len());
+        assert_eq!(found.len(), expected_matches.len());
+        assert!(progress.windows(2).all(|window| window[0] < window[1]));
+        assert!(progress
+            .iter()
+            .all(|scanned_count| *scanned_count <= outcome.scanned_count));
+
+        let found_paths: HashSet<PathBuf> = found
+            .iter()
+            .map(|entry| PathBuf::from(&entry.path))
+            .collect();
+        assert_eq!(found_paths.len(), found.len());
+        assert_eq!(found_paths, expected_matches);
+        assert!(found_paths
+            .iter()
+            .all(|path| path.starts_with(&canonical_root)));
+
+        #[cfg(unix)]
+        if permission_case_active {
+            assert!(outcome.skipped_count >= 3);
+        } else {
+            assert!(outcome.skipped_count >= 2);
+        }
     }
 
     #[test]
