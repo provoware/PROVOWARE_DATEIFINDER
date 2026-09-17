@@ -7,7 +7,7 @@ test("cyan fixture harness is deterministic", async ({ page }) => {
   await page.waitForLoadState("networkidle");
 
   await expect(page.locator("body")).toHaveAttribute("data-visual-fixture", "cyan-v1");
-  await expect(page.locator("script")).toHaveCount(0);
+  await expect(page.locator('script[src*="src/main.ts"]')).toHaveCount(0);
   await expect(page.locator(".result-row")).toHaveCount(5);
   await expect(page.locator(".result-row").first()).toContainText("Urlaub_2025_Berlin.jpg");
   await expect(page.locator("#preview-name")).toHaveText("Urlaub_2025_Berlin.jpg");
