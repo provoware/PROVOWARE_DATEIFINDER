@@ -1,0 +1,163 @@
+name: g5-state-tests-once
+
+on:
+  push:
+    branches:
+      - ops/g5-state-tests-runner
+
+permissions:
+  contents: write
+
+jobs:
+  g5-state-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout G5 test branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: hardening/g5-security-fail-first-1
+          fetch-depth: 0
+
+      - name: Insert exactly three G5 state tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src-tauri/src/lib.rs")
+          text = path.read_text()
+          anchor = '''    #[cfg(unix)]
+    #[test]
+    fn canonical_child_rejects_symlink_escape() {'''
+          if text.count(anchor) != 1:
+              raise SystemExit(f"expected exactly one insertion anchor, found {text.count(anchor)}")
+
+          tests = r'''    #[test]
+    fn validated_allowed_file_rejects_root_removed_after_approval() {
+        let root = temp_test_dir("removed-approved-root");
+        let file = root.join("file.txt");
+        fs::write(&file, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let file_path = file.to_string_lossy().into_owned();
+        fs::remove_dir_all(&root).expect("remove approved root");
+
+        let error = validated_allowed_file(&allowed_roots, &root_path, &file_path)
+            .expect_err("removed approved root must be rejected");
+        assert!(error.starts_with("Suchort ist nicht verfügbar:"));
+    }
+
+    #[test]
+    fn validated_allowed_file_rejects_file_deleted_after_approval() {
+        let root = temp_test_dir("deleted-approved-file");
+        let file = root.join("file.txt");
+        fs::write(&file, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let file_path = file.to_string_lossy().into_owned();
+        fs::remove_file(&file).expect("delete approved file");
+
+        let error = validated_allowed_file(&allowed_roots, &root_path, &file_path)
+            .expect_err("deleted approved file must be rejected");
+        assert!(error.starts_with("Datei ist nicht verfügbar:"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validated_allowed_file_rejects_file_moved_outside_approved_root() {
+        let root = temp_test_dir("moved-approved-root");
+        let outside = temp_test_dir("moved-approved-outside");
+        let original = root.join("file.txt");
+        let moved = outside.join("file.txt");
+        fs::write(&original, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let original_path = original.to_string_lossy().into_owned();
+        fs::rename(&original, &moved).expect("move approved file outside root");
+
+        let stale_error = validated_allowed_file(&allowed_roots, &root_path, &original_path)
+            .expect_err("stale moved path must be rejected");
+        assert!(stale_error.starts_with("Datei ist nicht verfügbar:"));
+
+        let moved_path = moved.to_string_lossy().into_owned();
+        let outside_error = validated_allowed_file(&allowed_roots, &root_path, &moved_path)
+            .expect_err("moved outside file must be rejected");
+        assert_eq!(
+            outside_error,
+            "Die Datei liegt außerhalb des freigegebenen Suchorts."
+        );
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
+    }
+
+'''
+          path.write_text(text.replace(anchor, tests + anchor, 1))
+          PY
+
+          git diff --check
+          changed="$(git diff --name-only)"
+          test "$changed" = "src-tauri/src/lib.rs"
+          git diff -- src-tauri/src/lib.rs
+
+      - name: Commit test-only patch
+        shell: bash
+        run: |
+          git config user.name "provoware"
+          git config user.email "provoware.one@gmail.com"
+          git add src-tauri/src/lib.rs
+          git commit -m "test: cover removed and moved G5 paths"
+          git push origin HEAD:hardening/g5-security-fail-first-1
+
+      - name: Install Rust 1.98.1
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: G5 - removed approved root
+        shell: bash
+        run: timeout 180s cargo test --locked --manifest-path src-tauri/Cargo.toml tests::validated_allowed_file_rejects_root_removed_after_approval -- --exact
+
+      - name: G5 - deleted approved file
+        shell: bash
+        run: timeout 180s cargo test --locked --manifest-path src-tauri/Cargo.toml tests::validated_allowed_file_rejects_file_deleted_after_approval -- --exact
+
+      - name: G5 - moved file outside approved root
+        shell: bash
+        run: timeout 180s cargo test --locked --manifest-path src-tauri/Cargo.toml tests::validated_allowed_file_rejects_file_moved_outside_approved_root -- --exact
