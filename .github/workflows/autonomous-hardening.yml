@@ -13,17 +13,62 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  ITERATION_CONTRACT_SHA: 0e854a8ff527106509c4ae6ac2c3a59cce41d8f9
 
 jobs:
   hardening:
-    name: SCHNELL -> TIEF -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
+    name: G0 -> G10a -> SCHNELL -> G3 -> TIEF -> STRESS -> SECURITY -> UI-E2E -> 200%-LAYOUT -> EVIDENCE
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout exact revision
+        id: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: G0 - enforce iteration scope
+        id: scope
+        run: node tests/hardening/scope-guard.mjs
+
+      - name: G10a - establish evidence identity
+        id: evidence_identity
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          REF_NAME: ${{ github.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          CHECKOUT_SHA="$(git rev-parse HEAD)"
+          {
+            echo "# G10a Evidence Identity"
+            echo
+            echo "Contract base SHA: $ITERATION_CONTRACT_SHA"
+            echo "Checkout SHA: $CHECKOUT_SHA"
+            echo "GitHub event SHA: $EVENT_SHA"
+            echo "Event: $EVENT_NAME"
+            echo "Ref: $REF_NAME"
+            if [ "$EVENT_NAME" = "pull_request" ]; then
+              echo "PR number: ${PR_NUMBER:-unknown}"
+              echo "PR head SHA: ${PR_HEAD_SHA:-unknown}"
+              echo "PR base SHA: ${PR_BASE_SHA:-unknown}"
+              if [ -n "${PR_HEAD_SHA:-}" ] && [ "$CHECKOUT_SHA" = "$PR_HEAD_SHA" ]; then
+                echo "Checkout identity: PR_HEAD"
+              elif [ "$CHECKOUT_SHA" = "$EVENT_SHA" ]; then
+                echo "Checkout identity: EVENT_SHA_OR_SYNTHETIC_MERGE"
+              else
+                echo "Checkout identity: OTHER"
+              fi
+            else
+              echo "Checkout identity: BRANCH_OR_DISPATCH_SHA"
+            fi
+            echo
+            echo "Evidence rule: success/failure/skipped must be reported from actual step outcomes; a listed gate is never assumed to have executed."
+          } | tee evidence-identity.md
+          cat evidence-identity.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up exact Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -55,11 +100,17 @@ jobs:
             patchelf
 
       - name: SCHNELL - source contracts and TypeScript
+        id: schnell
         run: |
           node --test tests/hardening/source-contracts.mjs
           npm run typecheck
 
+      - name: G3 - session restart stale-event race contract
+        id: g3_race
+        run: node --test tests/hardening/g3-session-race.mjs
+
       - name: TIEF - build fmt clippy and complete Rust suite
+        id: tief
         run: |
           npm run build
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -67,9 +118,11 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml
 
       - name: STRESS - 100000 matcher cases
+        id: stress
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
 
       - name: SECURITY - path escape symlink and export bounds
+        id: security
         run: |
           cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_accepts_real_child_and_rejects_outside_file
           cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_rejects_symlink_escape
@@ -79,31 +132,55 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: UI-E2E - static application acceptance matrix
+        id: ui_static
         run: npx playwright test --config=playwright.hardening.config.ts --grep "reference shell|theme|keyboard"
 
       - name: 200%-LAYOUT - critical controls remain reachable
+        id: layout_200
         run: npx playwright test --config=playwright.hardening.config.ts --grep "200-percent"
 
       - name: GOLDEN - original 768x512 regression stays unchanged
+        id: golden
         run: npm run test:visual
 
-      - name: Post-Merge-Evidence candidate report
+      - name: Evidence candidate report
         if: always()
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          SCOPE_OUTCOME: ${{ steps.scope.outcome }}
+          IDENTITY_OUTCOME: ${{ steps.evidence_identity.outcome }}
+          SCHNELL_OUTCOME: ${{ steps.schnell.outcome }}
+          G3_RACE_OUTCOME: ${{ steps.g3_race.outcome }}
+          TIEF_OUTCOME: ${{ steps.tief.outcome }}
+          STRESS_OUTCOME: ${{ steps.stress.outcome }}
+          SECURITY_OUTCOME: ${{ steps.security.outcome }}
+          UI_STATIC_OUTCOME: ${{ steps.ui_static.outcome }}
+          LAYOUT_200_OUTCOME: ${{ steps.layout_200.outcome }}
+          GOLDEN_OUTCOME: ${{ steps.golden.outcome }}
         run: |
+          CHECKOUT_SHA="$(git rev-parse HEAD 2>/dev/null || printf 'unavailable')"
           {
-            echo "# AUTONOMOUS HARDENING 0.1"
+            echo "# AUTONOMOUS HARDENING — candidate evidence"
             echo
-            echo "Commit: $GITHUB_SHA"
+            echo "Contract base SHA: $ITERATION_CONTRACT_SHA"
+            echo "Checkout SHA: $CHECKOUT_SHA"
             echo "Run: $GITHUB_RUN_ID"
+            echo "Event: $GITHUB_EVENT_NAME"
             echo "Branch/Ref: $GITHUB_REF"
             echo
-            echo "Automated gates executed:"
-            echo "- SCHNELL: source contracts + TypeScript"
-            echo "- TIEF: production build + rustfmt + clippy + Rust suite"
-            echo "- STRESS: 100000 matcher cases"
-            echo "- SECURITY: root escape + symlink escape + export bounds"
-            echo "- UI-E2E: static application acceptance matrix"
-            echo "- 200%-LAYOUT: critical-control reachability"
-            echo "- GOLDEN: original 768x512 pixel regression"
+            echo "Actual step outcomes:"
+            echo "- checkout: ${CHECKOUT_OUTCOME:-not_run}"
+            echo "- G0 scope: ${SCOPE_OUTCOME:-not_run}"
+            echo "- G10a identity: ${IDENTITY_OUTCOME:-not_run}"
+            echo "- SCHNELL: ${SCHNELL_OUTCOME:-not_run}"
+            echo "- G3 session race contract: ${G3_RACE_OUTCOME:-not_run}"
+            echo "- TIEF: ${TIEF_OUTCOME:-not_run}"
+            echo "- STRESS: ${STRESS_OUTCOME:-not_run}"
+            echo "- SECURITY: ${SECURITY_OUTCOME:-not_run}"
+            echo "- UI static acceptance: ${UI_STATIC_OUTCOME:-not_run}"
+            echo "- 200%-LAYOUT: ${LAYOUT_200_OUTCOME:-not_run}"
+            echo "- GOLDEN: ${GOLDEN_OUTCOME:-not_run}"
+            echo
+            echo "No gate is considered executed or green unless its recorded outcome is success."
           } | tee hardening-evidence.md
           cat hardening-evidence.md >> "$GITHUB_STEP_SUMMARY"
