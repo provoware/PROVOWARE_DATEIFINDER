@@ -860,6 +860,87 @@ mod tests {
         let _ = fs::remove_dir_all(foreign);
     }
 
+    #[test]
+    fn validated_allowed_file_rejects_root_removed_after_approval() {
+        let root = temp_test_dir("removed-approved-root");
+        let file = root.join("file.txt");
+        fs::write(&file, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let file_path = file.to_string_lossy().into_owned();
+        fs::remove_dir_all(&root).expect("remove approved root");
+
+        let error = validated_allowed_file(&allowed_roots, &root_path, &file_path)
+            .expect_err("removed approved root must be rejected");
+        assert!(error.starts_with("Suchort ist nicht verfügbar:"));
+    }
+
+    #[test]
+    fn validated_allowed_file_rejects_file_deleted_after_approval() {
+        let root = temp_test_dir("deleted-approved-file");
+        let file = root.join("file.txt");
+        fs::write(&file, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let file_path = file.to_string_lossy().into_owned();
+        fs::remove_file(&file).expect("delete approved file");
+
+        let error = validated_allowed_file(&allowed_roots, &root_path, &file_path)
+            .expect_err("deleted approved file must be rejected");
+        assert!(error.starts_with("Datei ist nicht verfügbar:"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validated_allowed_file_rejects_file_moved_outside_approved_root() {
+        let root = temp_test_dir("moved-approved-root");
+        let outside = temp_test_dir("moved-approved-outside");
+        let original = root.join("file.txt");
+        let moved = outside.join("file.txt");
+        fs::write(&original, b"ok").expect("write fixture file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(root.canonicalize().expect("canonical allowed root"));
+
+        let root_path = root.to_string_lossy().into_owned();
+        let original_path = original.to_string_lossy().into_owned();
+        fs::rename(&original, &moved).expect("move approved file outside root");
+
+        let stale_error = validated_allowed_file(&allowed_roots, &root_path, &original_path)
+            .expect_err("stale moved path must be rejected");
+        assert!(stale_error.starts_with("Datei ist nicht verfügbar:"));
+
+        let moved_path = moved.to_string_lossy().into_owned();
+        let outside_error = validated_allowed_file(&allowed_roots, &root_path, &moved_path)
+            .expect_err("moved outside file must be rejected");
+        assert_eq!(
+            outside_error,
+            "Die Datei liegt außerhalb des freigegebenen Suchorts."
+        );
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
+    }
+
     #[cfg(unix)]
     #[test]
     fn canonical_child_rejects_symlink_escape() {
