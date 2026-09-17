@@ -10,7 +10,7 @@
 - [x] rekursive Dateinamensuche mit Batches und Abbruch
 - [x] minimale Capabilities
 - [x] CI für Frontend und Rust
-- [ ] CI vollständig grün und anschließend Foundation einfrieren
+- [x] CI vollständig grün und Foundation auf `e01ff57` eingefroren
 
 ## P1 — Visual Master
 

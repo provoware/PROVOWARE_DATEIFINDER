@@ -4,9 +4,10 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Status
 
-**v0.1.0 – Foundation Candidate / Desktop Search MVP**
+**v0.1.1 – Foundation Frozen / Desktop Search MVP**
 
-- ✅ Tauri-2-Grundgerüst auf isoliertem Feature-Branch
+- ✅ Foundation-Baseline auf `e01ff57` eingefroren
+- ✅ Tauri-2-Grundgerüst
 - ✅ vier Theme-Tokens: Cyan, Violett, Grün, Orange
 - ✅ Referenzmodus 768 × 512 px
 - ✅ rekursive Desktop-Dateinamensuche in Rust
@@ -18,9 +19,9 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ serverseitige Root-Freigabe: Desktop-Suchorte werden im Rust-Kern registriert
 - ✅ minimale plattformspezifische Capabilities
 - ✅ responsive Mobile-Basis
-- 🟡 CI/Compiler-Gate läuft vor Freigabe auf `main`
+- ✅ Foundation-CI und Hardening-Gates grün
 - 🟡 Mobile-Dateiquellen sind vorbereitet; Android SAF/iOS Document Provider folgen separat
-- 🟡 Pixel-Regression gegen Golden Reference wird im nächsten visuellen Gate automatisiert
+- 🟡 P1 Visual Master beginnt mit der Vermessung der Cyan-Referenz gegen 768 × 512 px
 
 ## Schnellstart
 
