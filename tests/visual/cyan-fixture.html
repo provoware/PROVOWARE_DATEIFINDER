@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>DateiFinder · Cyan Visual Fixture</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body data-theme="cyan" data-visual-fixture="cyan-v1">
+    <div id="app" class="app-shell">
+      <aside class="sidebar" aria-label="Hauptnavigation">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">⌕</div>
+          <div><strong>DateiFinder</strong><span>Einfach. Schnell. Sicher.</span></div>
+        </div>
+        <nav class="nav-list">
+          <button class="nav-item is-active" type="button" aria-current="page"><span class="nav-icon">⌕</span><span><strong>Suche</strong><small>Dateien finden</small></span></button>
+          <button class="nav-item" type="button"><span class="nav-icon">📁</span><span><strong>Orte</strong><small>Ordner wählen</small></span></button>
+          <button class="nav-item" type="button"><span class="nav-icon">📄</span><span><strong>Dateitypen</strong><small>z. B. Bilder, PDF …</small></span></button>
+          <button class="nav-item" type="button"><span class="nav-icon">★</span><span><strong>Favoriten</strong><small>Häufige Suchen</small></span></button>
+          <button class="nav-item" type="button"><span class="nav-icon">◷</span><span><strong>Verlauf</strong><small>Letzte Suchen</small></span></button>
+          <button class="nav-item" type="button"><span class="nav-icon">⚙</span><span><strong>Einstellungen</strong></span></button>
+        </nav>
+        <p class="sidebar-claim" aria-hidden="true">Deine Dateien.<br />Deine Kontrolle.</p>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Dateinamen durchsuchen</h1>
+            <p>Finde Dateien in Sekunden.</p>
+          </div>
+          <div class="topbar-actions">
+            <button class="window-button" type="button" aria-label="Hilfe">?</button>
+            <button class="window-button" type="button" aria-label="Fenster minimieren">−</button>
+            <button class="window-button" type="button" aria-label="Fenster maximieren">□</button>
+            <button class="window-button" type="button" aria-label="Fenster schließen">×</button>
+          </div>
+        </header>
+
+        <section class="content-grid">
+          <div class="main-column">
+            <section class="panel search-panel" aria-label="Suche">
+              <div class="search-row">
+                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input type="search" value="urlaub 2025" readonly aria-label="Dateinamen suchen" /></label>
+                <button class="primary-button" type="button">Suchen</button>
+              </div>
+              <div class="chips" aria-label="Schnellfilter">
+                <button type="button">urlaub</button><button type="button">2025</button><button type="button">foto</button><button type="button">rechnung</button><button type="button">musik</button><button type="button">+</button><button type="button" class="options-chip">☷ Optionen</button>
+              </div>
+            </section>
+
+            <section class="panel results-panel" aria-labelledby="results-title">
+              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span>(12 Dateien)</span></h2><div class="results-tools"><select aria-label="Sortierung"><option>Name (A–Z)</option></select><button class="icon-button" type="button" aria-label="Listenansicht">☷</button></div></div>
+              <div class="results-list" aria-label="Gefundene Dateien">
+                <button class="result-row" type="button" aria-pressed="true"><span class="row-check">✓</span><span class="file-icon file-image">▧</span><span class="file-name">Urlaub_2025_Berlin.jpg</span><span class="file-path">~/Bilder/Urlaub</span><span class="file-size">3,2 MB</span><span class="file-date">04.08.2025</span></button>
+                <button class="result-row" type="button" aria-pressed="false"><span class="row-check"></span><span class="file-icon file-document">PDF</span><span class="file-name">Rechnung_Hotel_2025.pdf</span><span class="file-path">~/Downloads</span><span class="file-size">245 KB</span><span class="file-date">01.08.2025</span></button>
+                <button class="result-row" type="button" aria-pressed="false"><span class="row-check"></span><span class="file-icon file-audio">♫</span><span class="file-name">Sommer_Musik_2025.mp3</span><span class="file-path">~/Musik</span><span class="file-size">6,8 MB</span><span class="file-date">28.07.2025</span></button>
+                <button class="result-row" type="button" aria-pressed="false"><span class="row-check"></span><span class="file-icon file-text">txt</span><span class="file-name">Urlaubsplanung.txt</span><span class="file-path">~/Dokumente</span><span class="file-size">3 KB</span><span class="file-date">12.07.2025</span></button>
+                <button class="result-row" type="button" aria-pressed="false"><span class="row-check"></span><span class="file-icon file-image">▧</span><span class="file-name">Familie_Urlaub.png</span><span class="file-path">~/Bilder/Urlaub</span><span class="file-size">2,1 MB</span><span class="file-date">25.07.2025</span></button>
+              </div>
+            </section>
+          </div>
+
+          <aside class="panel preview-panel" aria-labelledby="preview-title">
+            <div class="panel-heading"><h2 id="preview-title"><span class="accent-dot"></span> Vorschau</h2></div>
+            <div class="preview-visual" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
+            <div class="preview-content"><strong id="preview-name">Urlaub_2025_Berlin.jpg</strong><span>JPG-Bild · 3,2 MB</span><dl><div><dt>Pfad:</dt><dd>~/Bilder/Urlaub</dd></div><div><dt>Größe:</dt><dd>3,2 MB</dd></div><div><dt>Geändert:</dt><dd>04.08.2025 14:32</dd></div><div><dt>Abmessungen:</dt><dd>4032 × 3024</dd></div></dl></div>
+          </aside>
+        </section>
+
+        <footer class="actionbar">
+          <div class="status-block"><span class="status-icon" aria-hidden="true">✓</span><span><strong>12 Dateien gefunden</strong><small>Suche abgeschlossen.</small></span></div>
+          <div class="footer-actions"><button type="button">📂 Ausgewählte öffnen</button><button type="button">▣ In Ordner zeigen</button><button type="button">💾 Liste speichern …</button></div>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>
