@@ -588,7 +588,8 @@ pub fn run() {
 mod tests {
     use super::{
         canonical_child, classify, matches_name, normalize_query, should_emit_progress,
-        traverse_filesystem, validate_export_lines, MAX_EXPORT_TOTAL_BYTES,
+        traverse_filesystem, validate_export_lines, validated_allowed_file, AllowedRoots,
+        MAX_EXPORT_TOTAL_BYTES,
     };
     use std::{
         collections::HashSet,
@@ -802,6 +803,61 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(outside_dir);
+    }
+
+    #[test]
+    fn canonical_child_rejects_parent_traversal_escape() {
+        let base = temp_test_dir("parent-traversal-base");
+        let root = base.join("root");
+        let nested = root.join("nested");
+        let outside = base.join("outside");
+        fs::create_dir_all(&nested).expect("create nested root");
+        fs::create_dir_all(&outside).expect("create outside root");
+        let secret = outside.join("secret.txt");
+        fs::write(&secret, b"secret").expect("write outside file");
+
+        let escaped = nested.join("..").join("..").join("outside").join("secret.txt");
+        assert!(canonical_child(&root, &escaped).is_err());
+
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn canonical_child_accepts_unicode_path_inside_root() {
+        let root = temp_test_dir("unicode-root");
+        let unicode = root.join("Grüße_日本_ß Datei.txt");
+        fs::write(&unicode, b"ok").expect("write unicode file");
+
+        assert_eq!(
+            canonical_child(&root, &unicode).expect("unicode child allowed"),
+            unicode.canonicalize().expect("canonical unicode file")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validated_allowed_file_rejects_unapproved_root() {
+        let allowed = temp_test_dir("allowed-root");
+        let foreign = temp_test_dir("foreign-root");
+        let foreign_file = foreign.join("secret.txt");
+        fs::write(&foreign_file, b"secret").expect("write foreign file");
+
+        let allowed_roots = AllowedRoots::default();
+        allowed_roots
+            .0
+            .lock()
+            .expect("lock allowed roots")
+            .insert(allowed.canonicalize().expect("canonical allowed root"));
+
+        let foreign_root = foreign.to_string_lossy().into_owned();
+        let foreign_path = foreign_file.to_string_lossy().into_owned();
+        let error = validated_allowed_file(&allowed_roots, &foreign_root, &foreign_path)
+            .expect_err("foreign root must be rejected");
+        assert_eq!(error, "Der Suchort wurde in dieser Sitzung nicht freigegeben.");
+
+        let _ = fs::remove_dir_all(allowed);
+        let _ = fs::remove_dir_all(foreign);
     }
 
     #[cfg(unix)]
