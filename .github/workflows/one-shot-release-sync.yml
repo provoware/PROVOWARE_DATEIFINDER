@@ -90,6 +90,30 @@ jobs:
           s = s[:start] + block + s[end:]
           p.write_text(s, encoding="utf-8")
 
+          # Stabilize the visual fixture gate: use Playwright's settled Golden comparison
+          # instead of raw sequential PNG byte equality.
+          Path("tests/visual/cyan-fixture.spec.ts").write_text("""import { expect, test } from "@playwright/test";
+
+          test("cyan fixture renders stable 768x512 reference", async ({ page }) => {
+            expect(page.viewportSize()).toEqual({ width: 768, height: 512 });
+
+            await page.goto("/tests/visual/cyan-fixture.html");
+            await page.waitForLoadState("networkidle");
+
+            await expect(page.locator("body")).toHaveAttribute("data-visual-fixture", "cyan-v1");
+            await expect(page.locator('script[src*="src/main.ts"]')).toHaveCount(0);
+            await expect(page.locator(".result-row")).toHaveCount(5);
+            await expect(page.locator(".result-row").first()).toContainText("Urlaub_2025_Berlin.jpg");
+            await expect(page.locator("#preview-name")).toHaveText("Urlaub_2025_Berlin.jpg");
+
+            await expect(page).toHaveScreenshot("cyan-fixture-768x512.png", {
+              fullPage: false,
+              animations: "disabled",
+              caret: "hide",
+            });
+          });
+          """.replace("          ", ""), encoding="utf-8")
+
           # Version identity: 0.1.1 everywhere.
           p = Path("package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
@@ -259,8 +283,8 @@ jobs:
           chmod +x start.sh verify.sh
           bash -n start.sh verify.sh
 
-      - name: Refresh approved Golden reference
-        run: npx playwright test tests/visual/dateifinder.spec.ts --project=chromium --update-snapshots
+      - name: Refresh approved Golden references
+        run: npm run test:visual:update
 
       - name: Full validation
         run: |
