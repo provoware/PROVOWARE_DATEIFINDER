@@ -67,6 +67,30 @@ jobs:
               raise SystemExit("Expected brand font-size not found")
           block = block.replace("font-size: 16px;", "font-size: 15px;", 1)
           s = s[:start] + block + s[end:]
+
+          brand_old = """  grid-template-columns: 39px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;"""
+          brand_new = """  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;"""
+          if brand_old not in s:
+              raise SystemExit("Expected brand grid geometry not found")
+          s = s.replace(brand_old, brand_new, 1)
+
+          mark_old = """  width: 39px;
+  height: 39px;
+  border-radius: 10px;"""
+          mark_new = """  width: 36px;
+  height: 36px;
+  border-radius: 9px;"""
+          if mark_old not in s:
+              raise SystemExit("Expected brand mark geometry not found")
+          s = s.replace(mark_old, mark_new, 1)
+
+          if "  font-size: 32px;\n  line-height: 1;" not in s:
+              raise SystemExit("Expected brand mark font size not found")
+          s = s.replace("  font-size: 32px;\n  line-height: 1;", "  font-size: 30px;\n  line-height: 1;", 1)
           css.write_text(s, encoding="utf-8")
 
           roadmap = Path("docs/ROADMAP.md")
