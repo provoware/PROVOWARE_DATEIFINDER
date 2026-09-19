@@ -279,7 +279,10 @@ jobs:
 
       - name: Validate clean source policy
         run: |
-          test ! -e src-tauri/gen || { echo "src-tauri/gen must not be committed"; exit 1; }
+          if git ls-files -- src-tauri/gen | grep -q .; then
+            echo "src-tauri/gen contains tracked files"
+            exit 1
+          fi
           git check-ignore src-tauri/gen/ >/dev/null
           python3 - <<'PY'
           from pathlib import Path
@@ -294,6 +297,7 @@ jobs:
       - name: Commit verified release synchronization and remove helper
         run: |
           rm -f .github/workflows/one-shot-release-sync.yml
+          rm -rf src-tauri/gen
           git add -A
           git update-index --chmod=+x start.sh verify.sh
           echo "Final staged diff:"
