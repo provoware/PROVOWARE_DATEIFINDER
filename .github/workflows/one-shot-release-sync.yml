@@ -294,14 +294,18 @@ jobs:
           assert 'name = "provoware-dateifinder"\nversion = "0.1.1"' in Path("src-tauri/Cargo.lock").read_text()
           PY
 
-      - name: Commit verified release synchronization and remove helper
+      - name: Commit verified release synchronization
         run: |
-          rm -f .github/workflows/one-shot-release-sync.yml
+          git checkout HEAD -- .github/workflows/autonomous-hardening.yml .github/workflows/one-shot-release-sync.yml
           rm -rf src-tauri/gen
           git add -A
           git update-index --chmod=+x start.sh verify.sh
-          echo "Final staged diff:"
+          echo "Final staged diff (workflow files intentionally excluded):"
           git diff --cached --stat
+          if git diff --cached --quiet; then
+            echo "No product/release changes to commit"
+            exit 1
+          fi
           git config user.name "PROVOWARE Release Bot"
           git config user.email "actions@users.noreply.github.com"
           git commit -m "release: verify DateiFinder 0.1.1 and synchronize repository"
