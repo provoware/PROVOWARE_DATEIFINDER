@@ -68,14 +68,14 @@ jobs:
           block = block.replace("font-size: 16px;", "font-size: 15px;", 1)
           s = s[:start] + block + s[end:]
 
-          brand_old = "  grid-template-columns: 39px minmax(0, 1fr);\\n  align-items: center;\\n  gap: 7px;"
-          brand_new = "  grid-template-columns: 36px minmax(0, 1fr);\\n  align-items: center;\\n  gap: 6px;"
+          brand_old = "  grid-template-columns: 39px minmax(0, 1fr);\n  align-items: center;\n  gap: 7px;"
+          brand_new = "  grid-template-columns: 36px minmax(0, 1fr);\n  align-items: center;\n  gap: 6px;"
           if brand_old not in s:
               raise SystemExit("Expected brand grid geometry not found")
           s = s.replace(brand_old, brand_new, 1)
 
-          mark_old = "  width: 39px;\\n  height: 39px;\\n  border-radius: 10px;"
-          mark_new = "  width: 36px;\\n  height: 36px;\\n  border-radius: 9px;"
+          mark_old = "  width: 39px;\n  height: 39px;\n  border-radius: 10px;"
+          mark_new = "  width: 36px;\n  height: 36px;\n  border-radius: 9px;"
           if mark_old not in s:
               raise SystemExit("Expected brand mark geometry not found")
           s = s.replace(mark_old, mark_new, 1)
