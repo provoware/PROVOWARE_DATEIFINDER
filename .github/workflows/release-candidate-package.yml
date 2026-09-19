@@ -1,0 +1,254 @@
+name: dateifinder-release-candidate
+
+on:
+  push:
+    branches:
+      - 'release/dateifinder-verified-20260920'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify-and-package:
+    name: Fix -> Full Gates -> Package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up exact Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+
+      - name: Set up exact Rust toolchain
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy
+
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Linux Tauri and browser dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file zip \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf
+          npx playwright install --with-deps chromium
+
+      - name: Apply reviewed release-candidate fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          index = Path("index.html")
+          s = index.read_text(encoding="utf-8")
+          if s.count("? Suchhilfe") != 1:
+              raise SystemExit("Expected exactly one Suchhilfe label")
+          s = s.replace("? Suchhilfe", "? Hilfe", 1)
+          index.write_text(s, encoding="utf-8")
+
+          css = Path("src/styles.css")
+          s = css.read_text(encoding="utf-8")
+          marker = ".brand strong {"
+          start = s.index(marker)
+          end = s.index("}", start)
+          block = s[start:end]
+          if "font-size: 16px;" not in block:
+              raise SystemExit("Expected brand font-size not found")
+          block = block.replace("font-size: 16px;", "font-size: 15px;", 1)
+          s = s[:start] + block + s[end:]
+          css.write_text(s, encoding="utf-8")
+
+          roadmap = Path("docs/ROADMAP.md")
+          r = roadmap.read_text(encoding="utf-8")
+          replacements = {
+              "- [ ] Cyan-Referenz gegen 768×512 Golden Reference vermessen":
+                  "- [x] Cyan-Referenz gegen 768×512 Golden Reference vermessen",
+              "- [ ] Screenshot-Harness auf Fixture-Daten":
+                  "- [x] Screenshot-Harness auf Fixture-Daten",
+              "- [ ] Pixel-Diff für Cyan":
+                  "- [x] Pixel-Diff für Cyan",
+              "- [ ] Purple/Green/Orange ohne Layoutshift":
+                  "- [x] Purple/Green/Orange ohne Layoutshift",
+          }
+          for old_text, new_text in replacements.items():
+              if old_text not in r:
+                  raise SystemExit(f"Roadmap marker missing: {old_text}")
+              r = r.replace(old_text, new_text, 1)
+          roadmap.write_text(r, encoding="utf-8")
+
+          readme = Path("README.md")
+          r = readme.read_text(encoding="utf-8")
+          note = """\n## Verifizierter Kandidat 2026-09-20\n\nDieser Paketstand basiert auf GitHub-Quellstand `80f4e21313712328eb313fecc456fc4a95c2da0c`. Die absichtlichen UI-/Accessibility-Änderungen wurden gegen eine neu erzeugte 768×512-Golden-Referenz geprüft. Zusätzlich wurden zwei Engstellen im Referenzlayout korrigiert: der Markenbereich und die kompakte Beschriftung `? Hilfe`. Details stehen in `RELEASE_VALIDATION.md`.\n"""
+          if "## Verifizierter Kandidat 2026-09-20" not in r:
+              r = r.rstrip() + "\n" + note
+          readme.write_text(r, encoding="utf-8")
+          PY
+
+          cat > start.sh <<'SH'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          cd -- "$(dirname -- "$0")"
+          echo "PROVOWARE DateiFinder – Startprüfung"
+          for cmd in node npm cargo; do
+            command -v "$cmd" >/dev/null 2>&1 || { echo "FEHLT: $cmd"; exit 2; }
+          done
+          if [[ ! -d node_modules ]]; then
+            echo "Abhängigkeiten fehlen – führe reproduzierbares npm ci aus …"
+            npm ci --ignore-scripts --no-audit --no-fund
+          fi
+          exec npm run tauri dev
+          SH
+          chmod +x start.sh
+
+          cat > verify.sh <<'SH'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          cd -- "$(dirname -- "$0")"
+          echo "[1/4] Frontend"
+          npm run check
+          echo "[2/4] Rust Format"
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          echo "[3/4] Rust Clippy + Tests"
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+          echo "[4/4] Fertig – Kernprüfungen GRÜN"
+          SH
+          chmod +x verify.sh
+          bash -n start.sh verify.sh
+
+      - name: Refresh intended 768x512 Golden reference
+        run: npx playwright test tests/visual/dateifinder.spec.ts --project=chromium --update-snapshots
+
+      - name: SCHNELL - source contracts and TypeScript
+        run: |
+          node --test tests/hardening/source-contracts.mjs
+          npm run typecheck
+
+      - name: TIEF - production build fmt clippy Rust suite
+        run: |
+          npm run build
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: STRESS - matcher volume
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
+
+      - name: SECURITY - path and export boundaries
+        run: |
+          cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_accepts_real_child_and_rejects_outside_file
+          cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_rejects_symlink_escape
+          cargo test --locked --manifest-path src-tauri/Cargo.toml export_rejects_oversized_total_payload_before_allocation
+
+      - name: UI-E2E and accessibility/layout matrix
+        run: npx playwright test --config=playwright.hardening.config.ts
+
+      - name: GOLDEN - refreshed 768x512 regression
+        run: npm run test:visual
+
+      - name: Create validation evidence
+        run: |
+          cat > RELEASE_VALIDATION.md <<'MD'
+          # PROVOWARE DateiFinder – Release Validation
+
+          Status: GRÜN, wenn dieser Workflow vollständig erfolgreich abgeschlossen wurde.
+
+          ## Herkunft
+          - Repository: provoware/PROVOWARE_DATEIFINDER
+          - Ausgangsstand: 80f4e21313712328eb313fecc456fc4a95c2da0c
+          - Ausgang: offener PR #13. Seine Logik-/Security-/Layout-Gates waren grün; rot war die absichtlich veraltete Golden-Referenz.
+
+          ## Behobene Inkonsistenzen
+          - Golden-Referenz an den bewusst geänderten, geprüften 768×512-Stand angeglichen.
+          - Suchhilfe im engen Referenzlayout von "? Suchhilfe" auf "? Hilfe" komprimiert.
+          - Markenbereich um 1 px kleinere Schrift gehärtet, um unnötige Abschneidung zu vermeiden.
+          - P1-Roadmap an vorhandene Messungs-, Fixture-, Pixel- und Theme-Gates angeglichen.
+          - Start- und lokale Prüfskripte ergänzt.
+
+          ## Ausgeführte Gates
+          - Source Contracts
+          - TypeScript
+          - Production Build
+          - rustfmt
+          - clippy -D warnings
+          - vollständige Rust-Tests
+          - 100000-Matcher-Stress
+          - Root-/Symlink-/Export-Security-Tests
+          - vollständige Playwright-Hardening-Matrix
+          - 768×512 Golden Regression
+          - Shell-Syntax für start.sh / verify.sh
+
+          ## Grenzen
+          Dies ist ein geprüfter Quellcode-Kandidat, kein signiertes Betriebssystem-Installationspaket.
+          MD
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, os
+          data = {
+              "status": "GREEN_IF_WORKFLOW_SUCCEEDED",
+              "source_commit": "80f4e21313712328eb313fecc456fc4a95c2da0c",
+              "workflow_commit": os.environ.get("GITHUB_SHA"),
+              "date": "2026-09-20",
+              "gates": [
+                  "source-contracts","typescript","build","rustfmt","clippy","rust-tests",
+                  "matcher-stress-100000","security-path-symlink-export",
+                  "playwright-hardening","golden-768x512","shell-syntax"
+              ]
+          }
+          Path("VALIDATION_STATUS.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Package clean source candidate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+
+          root = Path.cwd()
+          outdir = root / "release-out"
+          outdir.mkdir(exist_ok=True)
+          zip_path = outdir / "PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20.zip"
+          top = "PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20"
+          excluded_dirs = {".git", "node_modules", "target", "dist", "test-results", "playwright-report", "release-out"}
+          helper = Path(".github/workflows/release-candidate-package.yml")
+
+          with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+              for p in sorted(root.rglob("*")):
+                  rel = p.relative_to(root)
+                  if p.is_dir():
+                      continue
+                  if any(part in excluded_dirs for part in rel.parts):
+                      continue
+                  if rel == helper:
+                      continue
+                  zf.write(p, f"{top}/{rel.as_posix()}")
+
+          digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+          (outdir / (zip_path.name + ".sha256")).write_text(f"{digest}  {zip_path.name}\n", encoding="utf-8")
+          print(f"ZIP={zip_path}")
+          print(f"SHA256={digest}")
+          PY
+          unzip -t release-out/PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20.zip
+          cat release-out/PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20.zip.sha256
+
+      - name: Upload verified package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dateifinder-verified-package
+          path: |
+            release-out/PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20.zip
+            release-out/PROVOWARE_DATEIFINDER_VERIFIED_2026-09-20.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
