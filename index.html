@@ -45,16 +45,16 @@
             <section class="panel search-panel" aria-labelledby="search-heading">
               <h2 id="search-heading" class="sr-only">Suche</h2>
               <form id="search-form" class="search-row">
-                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" value="urlaub 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" /></label>
+                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" placeholder="z. B. rechnung 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" /></label>
                 <button id="search-button" class="primary-button" type="submit">Suchen</button>
               </form>
-              <div class="chips" aria-label="Schnellfilter">
-                <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button type="button" data-query-chip="+">+</button><button type="button" class="options-chip" disabled>☷ Optionen</button>
+              <div class="chips" aria-label="Suchbeispiele">
+                <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button id="search-help-button" type="button" class="options-chip" aria-haspopup="dialog">? Suchhilfe</button>
               </div>
             </section>
 
             <section class="panel results-panel" aria-labelledby="results-title">
-              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" disabled>■</button></div></div>
+              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count" aria-live="polite" aria-atomic="true">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
               <div id="results-list" class="results-list" aria-label="Gefundene Dateien"></div>
               <div id="empty-state" class="empty-state"><strong>Noch kein Suchort gewählt.</strong><span>Wähle links unter „Orte“ zuerst einen Ordner.</span></div>
             </section>
@@ -68,11 +68,23 @@
         </section>
 
         <footer class="actionbar">
-          <div class="status-block"><span id="status-icon" class="status-icon" aria-hidden="true">✓</span><span><strong id="status-title">Bereit</strong><small id="status-detail">Wähle einen Suchort.</small></span></div>
+          <div class="status-block" role="status" aria-live="polite" aria-atomic="true"><span id="status-icon" class="status-icon" aria-hidden="true">✓</span><span><strong id="status-title">Bereit</strong><small id="status-detail">Wähle einen Suchort.</small></span></div>
           <div class="footer-actions"><button id="open-selected" type="button" disabled>📂 Ausgewählte öffnen</button><button id="reveal-selected" type="button" disabled>▣ In Ordner zeigen</button><button id="export-results" type="button" disabled>💾 Liste speichern …</button></div>
         </footer>
       </main>
     </div>
+    <dialog id="search-help-dialog" class="help-dialog" aria-labelledby="search-help-title">
+      <div class="help-dialog-heading">
+        <div><h2 id="search-help-title">Suche einfach erklärt</h2><p>In drei Schritten zur richtigen Datei.</p></div>
+      </div>
+      <ol class="help-steps">
+        <li><strong>Ordner wählen</strong><span>Klicke links auf „Orte“ und wähle den Ordner aus, den du durchsuchen möchtest.</span></li>
+        <li><strong>Wörter eingeben</strong><span>Tippe einen Teil des Dateinamens ein, zum Beispiel <q>rechnung 2025</q>.</span></li>
+        <li><strong>Suche starten</strong><span>Klicke auf „Suchen“. Unterordner werden automatisch mit durchsucht.</span></li>
+      </ol>
+      <div class="help-note"><strong>Gut zu wissen</strong><span>Bei mehreren Wörtern muss jedes Wort im Dateinamen vorkommen. Groß- und Kleinschreibung spielen keine Rolle.</span></div>
+      <form method="dialog"><button class="primary-button help-close" type="submit" autofocus>Verstanden</button></form>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

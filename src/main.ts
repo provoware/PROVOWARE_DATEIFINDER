@@ -75,7 +75,7 @@ interface AppState {
 }
 
 const initialState: AppState = {
-  query: "urlaub 2025",
+  query: "",
   sourcePath: null,
   sourceLabel: "Ordner wählen",
   results: [],
@@ -249,6 +249,7 @@ const ui = {
   export: byId<HTMLButtonElement>("export-results"),
   sort: byId<HTMLSelectElement>("sort-select"),
   theme: byId<HTMLSelectElement>("theme-select"),
+  searchHelp: byId<HTMLDialogElement>("search-help-dialog"),
   previewName: byId<HTMLElement>("preview-name"),
   previewSummary: byId<HTMLElement>("preview-summary"),
   previewPath: byId<HTMLElement>("preview-path"),
@@ -499,6 +500,7 @@ async function initialize(): Promise<void> {
 
   byId<HTMLButtonElement>("choose-source-nav").addEventListener("click", chooseSource);
   byId<HTMLButtonElement>("mobile-source-button").addEventListener("click", chooseSource);
+  byId<HTMLButtonElement>("search-help-button").addEventListener("click", () => ui.searchHelp.showModal());
   ui.form.addEventListener("submit", (event) => {
     event.preventDefault();
     void runSearch();
@@ -520,7 +522,7 @@ async function initialize(): Promise<void> {
   document.querySelectorAll<HTMLButtonElement>("[data-query-chip]").forEach((button) => {
     button.addEventListener("click", () => {
       const value = button.dataset.queryChip;
-      if (!value || value === "+") return;
+      if (!value) return;
       const parts = new Set(ui.query.value.trim().split(/\s+/).filter(Boolean));
       parts.add(value);
       ui.query.value = [...parts].join(" ");

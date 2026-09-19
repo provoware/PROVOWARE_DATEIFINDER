@@ -27,6 +27,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -164,9 +168,9 @@ button:disabled {
 
 .brand {
   display: grid;
-  grid-template-columns: 43px 1fr;
+  grid-template-columns: 39px minmax(0, 1fr);
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   min-height: 53px;
   margin-bottom: 7px;
 }
@@ -174,11 +178,11 @@ button:disabled {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 43px;
-  height: 43px;
+  width: 39px;
+  height: 39px;
   border-radius: 10px;
   color: white;
-  font-size: 35px;
+  font-size: 32px;
   line-height: 1;
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.98), rgba(var(--accent-rgb), 0.33));
   box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.38);
@@ -186,8 +190,14 @@ button:disabled {
 
 .brand strong {
   display: block;
-  font-size: 20px;
+  overflow: hidden;
+  font-size: 16px;
   line-height: 1.05;
+  text-overflow: ellipsis;
+}
+
+.brand > div {
+  min-width: 0;
 }
 
 .brand span {
@@ -376,6 +386,81 @@ button:disabled {
 .chips .options-chip {
   margin-left: auto;
   border-radius: 7px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.help-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid rgba(var(--accent-rgb), 0.78);
+  border-radius: 14px;
+  color: var(--text-primary);
+  background: var(--panel-bg-strong);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+}
+
+.help-dialog::backdrop {
+  background: rgba(0, 8, 12, 0.78);
+  backdrop-filter: blur(3px);
+}
+
+.help-dialog-heading {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.2);
+}
+
+.help-dialog h2,
+.help-dialog p {
+  margin: 0;
+}
+
+.help-dialog p,
+.help-steps span,
+.help-note span {
+  color: var(--text-secondary);
+}
+
+.help-dialog p {
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.help-steps {
+  margin: 0;
+  padding: 16px 24px 12px 48px;
+}
+
+.help-steps li {
+  margin-bottom: 12px;
+}
+
+.help-steps strong,
+.help-steps span,
+.help-note strong,
+.help-note span {
+  display: block;
+}
+
+.help-steps span,
+.help-note span {
+  margin-top: 3px;
+  line-height: 1.45;
+  font-size: 11px;
+}
+
+.help-note {
+  margin: 0 20px 16px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.help-close {
+  display: block;
+  min-width: 110px;
+  min-height: 38px;
+  margin: 0 20px 18px auto;
 }
 
 .results-panel {
