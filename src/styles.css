@@ -168,9 +168,9 @@ button:disabled {
 
 .brand {
   display: grid;
-  grid-template-columns: 39px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-height: 53px;
   margin-bottom: 7px;
 }
@@ -178,11 +178,11 @@ button:disabled {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 39px;
-  height: 39px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
   color: white;
-  font-size: 32px;
+  font-size: 30px;
   line-height: 1;
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.98), rgba(var(--accent-rgb), 0.33));
   box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.38);
@@ -191,7 +191,7 @@ button:disabled {
 .brand strong {
   display: block;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.05;
   text-overflow: ellipsis;
 }

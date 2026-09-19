@@ -64,3 +64,7 @@ DateiFinder verarbeitet Dateinamen lokal. Der Desktop-Suchort wird im Rust-Kern 
 ## Lizenz
 
 Noch nicht festgelegt. Vor einer öffentlichen Release-Version bewusst entscheiden.
+
+## Verifizierter Kandidat 2026-09-20
+
+Die UI-/Accessibility-Änderungen aus PR #13 wurden in einem isolierten Vollvalidierungslauf geprüft. Der finale PR-Head wird nach diesem Commit erneut durch die normalen Quality- und Hardening-Gates geprüft. Versionsfelder in npm, Cargo und Tauri sind auf 0.1.1 synchronisiert.
