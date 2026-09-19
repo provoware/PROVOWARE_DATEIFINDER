@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("cyan fixture harness is deterministic", async ({ page }) => {
+test("cyan fixture renders stable 768x512 reference", async ({ page }) => {
   expect(page.viewportSize()).toEqual({ width: 768, height: 512 });
 
   await page.goto("/tests/visual/cyan-fixture.html");
@@ -12,16 +12,9 @@ test("cyan fixture harness is deterministic", async ({ page }) => {
   await expect(page.locator(".result-row").first()).toContainText("Urlaub_2025_Berlin.jpg");
   await expect(page.locator("#preview-name")).toHaveText("Urlaub_2025_Berlin.jpg");
 
-  const first = await page.screenshot({
+  await expect(page).toHaveScreenshot("cyan-fixture-768x512.png", {
     fullPage: false,
     animations: "disabled",
     caret: "hide",
   });
-  const second = await page.screenshot({
-    fullPage: false,
-    animations: "disabled",
-    caret: "hide",
-  });
-
-  expect(first.equals(second)).toBe(true);
 });
