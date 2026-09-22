@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
+    ffi::OsString,
     fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -12,11 +13,14 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_opener::{open_path as open_system_path, OpenerExt};
 
 const MAX_EXPORT_LINES: usize = 250_000;
 const MAX_EXPORT_LINE_BYTES: usize = 32_768;
 const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
+const MAX_QUERY_BYTES: usize = 4_096;
+const MAX_QUERY_TOKENS: usize = 64;
+const MAX_ACTIVE_SEARCHES: usize = 4;
 const PROGRESS_INTERVAL: usize = 250;
 
 #[derive(Clone, Default)]
@@ -29,7 +33,7 @@ pub struct AllowedRoots(pub Arc<Mutex<HashSet<PathBuf>>>);
 #[serde(rename_all = "camelCase")]
 pub struct SearchRequest {
     pub session_id: String,
-    pub root_path: String,
+    pub root_path_key: String,
     pub query: String,
     pub batch_size: usize,
     pub max_results: usize,
@@ -41,10 +45,18 @@ pub struct FileEntry {
     pub id: String,
     pub display_name: String,
     pub path: String,
+    pub path_key: String,
     pub extension: String,
     pub size_bytes: u64,
     pub modified_at: Option<u128>,
     pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PickedRoot {
+    pub path: String,
+    pub path_key: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -97,6 +109,20 @@ fn normalize_query(query: &str) -> Vec<String> {
         .collect()
 }
 
+fn validate_query(query: &str) -> Result<Vec<String>, String> {
+    if query.len() > MAX_QUERY_BYTES {
+        return Err("Der Suchbegriff ist zu lang.".into());
+    }
+    let tokens = normalize_query(query);
+    if tokens.is_empty() {
+        return Err("Der Suchbegriff darf nicht leer sein.".into());
+    }
+    if tokens.len() > MAX_QUERY_TOKENS {
+        return Err("Der Suchbegriff enthält zu viele Wörter.".into());
+    }
+    Ok(tokens)
+}
+
 fn matches_name(name: &str, tokens: &[String]) -> bool {
     if tokens.is_empty() {
         return true;
@@ -116,8 +142,76 @@ fn classify(extension: &str) -> &'static str {
 
 fn stable_id(path: &Path) -> String {
     let mut hasher = DefaultHasher::new();
-    path.to_string_lossy().hash(&mut hasher);
+    path.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+fn encode_units<I>(units: I, width: usize) -> String
+where
+    I: IntoIterator<Item = u32>,
+{
+    units
+        .into_iter()
+        .map(|unit| format!("{unit:0width$x}"))
+        .collect()
+}
+
+fn decode_units(value: &str, width: usize) -> Result<Vec<u32>, String> {
+    if value.len() % width != 0 {
+        return Err("Ungültiger Dateischlüssel.".into());
+    }
+    value
+        .as_bytes()
+        .chunks(width)
+        .map(|chunk| {
+            let text = std::str::from_utf8(chunk).map_err(|_| "Ungültiger Dateischlüssel.")?;
+            u32::from_str_radix(text, 16).map_err(|_| "Ungültiger Dateischlüssel.".into())
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+fn encode_path(path: &Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    format!(
+        "unix:{}",
+        encode_units(path.as_os_str().as_bytes().iter().map(|v| *v as u32), 2)
+    )
+}
+
+#[cfg(unix)]
+fn decode_path(value: &str) -> Result<PathBuf, String> {
+    use std::os::unix::ffi::OsStringExt;
+    let encoded = value
+        .strip_prefix("unix:")
+        .ok_or_else(|| "Ungültiger Dateischlüssel.".to_string())?;
+    let bytes = decode_units(encoded, 2)?
+        .into_iter()
+        .map(|unit| u8::try_from(unit).map_err(|_| "Ungültiger Dateischlüssel.".to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PathBuf::from(OsString::from_vec(bytes)))
+}
+
+#[cfg(windows)]
+fn encode_path(path: &Path) -> String {
+    use std::os::windows::ffi::OsStrExt;
+    format!(
+        "windows:{}",
+        encode_units(path.as_os_str().encode_wide().map(u32::from), 4)
+    )
+}
+
+#[cfg(windows)]
+fn decode_path(value: &str) -> Result<PathBuf, String> {
+    use std::os::windows::ffi::OsStringExt;
+    let encoded = value
+        .strip_prefix("windows:")
+        .ok_or_else(|| "Ungültiger Dateischlüssel.".to_string())?;
+    let units = decode_units(encoded, 4)?
+        .into_iter()
+        .map(|unit| u16::try_from(unit).map_err(|_| "Ungültiger Dateischlüssel.".to_string()))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PathBuf::from(OsString::from_wide(&units)))
 }
 
 fn file_entry(path: &Path, metadata: &fs::Metadata) -> FileEntry {
@@ -139,6 +233,7 @@ fn file_entry(path: &Path, metadata: &fs::Metadata) -> FileEntry {
         id: stable_id(path),
         display_name,
         path: path.to_string_lossy().into_owned(),
+        path_key: encode_path(path),
         extension: extension.clone(),
         size_bytes: metadata.len(),
         modified_at,
@@ -185,6 +280,153 @@ fn validate_export_lines(lines: &[String]) -> Result<usize, String> {
     Ok(total_bytes)
 }
 
+fn register_search(
+    sessions: &mut HashMap<String, Arc<AtomicBool>>,
+    id: String,
+    cancelled: Arc<AtomicBool>,
+) -> Result<(), String> {
+    if sessions.contains_key(&id) {
+        return Err("Diese Suchsitzung existiert bereits.".into());
+    }
+    if sessions.len() >= MAX_ACTIVE_SEARCHES {
+        return Err("Zu viele gleichzeitige Suchvorgänge.".into());
+    }
+    sessions.insert(id, cancelled);
+    Ok(())
+}
+
+enum ScanEvent {
+    Batch {
+        items: Vec<FileEntry>,
+        scanned_count: usize,
+    },
+    Progress {
+        scanned_count: usize,
+    },
+}
+
+struct ScanOutcome {
+    scanned_count: usize,
+    result_count: usize,
+    skipped_count: usize,
+    cancelled: bool,
+}
+
+fn scan_directory<F>(
+    root: PathBuf,
+    tokens: &[String],
+    batch_size: usize,
+    max_results: usize,
+    cancelled: &AtomicBool,
+    mut on_event: F,
+) -> ScanOutcome
+where
+    F: FnMut(ScanEvent),
+{
+    let mut queue = VecDeque::from([root]);
+    let mut batch = Vec::with_capacity(batch_size);
+    let mut scanned_count = 0usize;
+    let mut result_count = 0usize;
+    let mut skipped_count = 0usize;
+    let mut last_progress = 0usize;
+
+    while let Some(directory) = queue.pop_front() {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let entries = match fs::read_dir(&directory) {
+            Ok(entries) => entries,
+            Err(_) => {
+                skipped_count += 1;
+                continue;
+            }
+        };
+
+        for entry in entries {
+            if cancelled.load(Ordering::Relaxed) {
+                break;
+            }
+
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            scanned_count += 1;
+            if should_emit_progress(scanned_count, last_progress) {
+                last_progress = scanned_count;
+                on_event(ScanEvent::Progress { scanned_count });
+            }
+
+            let file_type = match entry.file_type() {
+                Ok(kind) => kind,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            if file_type.is_symlink() {
+                skipped_count += 1;
+                continue;
+            }
+            if file_type.is_dir() {
+                queue.push_back(entry.path());
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !matches_name(&name, tokens) {
+                continue;
+            }
+
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => {
+                    skipped_count += 1;
+                    continue;
+                }
+            };
+
+            batch.push(file_entry(&entry.path(), &metadata));
+            result_count += 1;
+
+            if batch.len() >= batch_size {
+                on_event(ScanEvent::Batch {
+                    items: std::mem::take(&mut batch),
+                    scanned_count,
+                });
+            }
+
+            if result_count >= max_results {
+                queue.clear();
+                break;
+            }
+        }
+    }
+
+    if !batch.is_empty() {
+        on_event(ScanEvent::Batch {
+            items: batch,
+            scanned_count,
+        });
+    }
+
+    ScanOutcome {
+        scanned_count,
+        result_count,
+        skipped_count,
+        cancelled: cancelled.load(Ordering::Relaxed),
+    }
+}
+
 #[tauri::command]
 fn platform_capabilities() -> PlatformCapabilities {
     let mobile = cfg!(any(target_os = "android", target_os = "ios"));
@@ -202,7 +444,7 @@ fn platform_capabilities() -> PlatformCapabilities {
 async fn pick_search_root(
     app: AppHandle,
     allowed_roots: State<'_, AllowedRoots>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<PickedRoot>, String> {
     let selected = app
         .dialog()
         .file()
@@ -231,9 +473,12 @@ async fn pick_search_root(
     if roots.len() >= 64 && !roots.contains(&canonical) {
         return Err("Zu viele Suchorte in dieser Sitzung. Bitte DateiFinder neu starten.".into());
     }
-    roots.insert(canonical);
+    roots.insert(canonical.clone());
 
-    Ok(Some(path.to_string_lossy().into_owned()))
+    Ok(Some(PickedRoot {
+        path: path.to_string_lossy().into_owned(),
+        path_key: encode_path(&canonical),
+    }))
 }
 
 #[tauri::command]
@@ -243,11 +488,7 @@ fn start_search(
     allowed_roots: State<'_, AllowedRoots>,
     request: SearchRequest,
 ) -> Result<(), String> {
-    if request.root_path.trim().is_empty() {
-        return Err("Kein Suchort angegeben.".into());
-    }
-
-    let root = PathBuf::from(&request.root_path);
+    let root = decode_path(&request.root_path_key)?;
     let canonical_root = root
         .canonicalize()
         .map_err(|error| format!("Suchort kann nicht geöffnet werden: {error}"))?;
@@ -267,7 +508,7 @@ fn start_search(
 
     let batch_size = request.batch_size.clamp(10, 500);
     let max_results = request.max_results.clamp(1, 250_000);
-    let tokens = normalize_query(&request.query);
+    let tokens = validate_query(&request.query)?;
     let id = request.session_id.trim().to_string();
     if id.is_empty() || id.len() > 128 {
         return Err("Ungültige Suchsitzung.".into());
@@ -279,10 +520,7 @@ fn start_search(
             .0
             .lock()
             .map_err(|_| "Interner Suchstatus ist blockiert.".to_string())?;
-        if sessions.contains_key(&id) {
-            return Err("Diese Suchsitzung existiert bereits.".into());
-        }
-        sessions.insert(id.clone(), cancelled.clone());
+        register_search(&mut sessions, id.clone(), cancelled.clone())?;
     }
 
     let app_for_thread = app.clone();
@@ -291,89 +529,17 @@ fn start_search(
 
     std::thread::spawn(move || {
         let started = Instant::now();
-        let mut queue = VecDeque::from([canonical_root]);
-        let mut batch = Vec::with_capacity(batch_size);
-        let mut scanned_count = 0usize;
-        let mut result_count = 0usize;
-        let mut skipped_count = 0usize;
-        let mut last_progress = 0usize;
-
-        while let Some(directory) = queue.pop_front() {
-            if cancelled.load(Ordering::Relaxed) {
-                break;
-            }
-
-            let entries = match fs::read_dir(&directory) {
-                Ok(entries) => entries,
-                Err(_) => {
-                    skipped_count += 1;
-                    continue;
-                }
-            };
-
-            for entry in entries {
-                if cancelled.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                scanned_count += 1;
-                if should_emit_progress(scanned_count, last_progress) {
-                    last_progress = scanned_count;
-                    let _ = app_for_thread.emit(
-                        "search-progress",
-                        SearchProgressPayload {
-                            session_id: id_for_thread.clone(),
-                            scanned_count,
-                        },
-                    );
-                }
-
-                let file_type = match entry.file_type() {
-                    Ok(kind) => kind,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                if file_type.is_symlink() {
-                    skipped_count += 1;
-                    continue;
-                }
-                if file_type.is_dir() {
-                    queue.push_back(entry.path());
-                    continue;
-                }
-                if !file_type.is_file() {
-                    continue;
-                }
-
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if !matches_name(&name, &tokens) {
-                    continue;
-                }
-
-                let metadata = match entry.metadata() {
-                    Ok(metadata) => metadata,
-                    Err(_) => {
-                        skipped_count += 1;
-                        continue;
-                    }
-                };
-
-                batch.push(file_entry(&entry.path(), &metadata));
-                result_count += 1;
-
-                if batch.len() >= batch_size {
-                    let items = std::mem::take(&mut batch);
+        let outcome = scan_directory(
+            canonical_root,
+            &tokens,
+            batch_size,
+            max_results,
+            &cancelled,
+            |event| match event {
+                ScanEvent::Batch {
+                    items,
+                    scanned_count,
+                } => {
                     let _ = app_for_thread.emit(
                         "search-batch",
                         SearchBatchPayload {
@@ -383,27 +549,19 @@ fn start_search(
                         },
                     );
                 }
-
-                if result_count >= max_results {
-                    queue.clear();
-                    break;
+                ScanEvent::Progress { scanned_count } => {
+                    let _ = app_for_thread.emit(
+                        "search-progress",
+                        SearchProgressPayload {
+                            session_id: id_for_thread.clone(),
+                            scanned_count,
+                        },
+                    );
                 }
-            }
-        }
+            },
+        );
 
-        if !batch.is_empty() {
-            let items = std::mem::take(&mut batch);
-            let _ = app_for_thread.emit(
-                "search-batch",
-                SearchBatchPayload {
-                    session_id: id_for_thread.clone(),
-                    items,
-                    scanned_count,
-                },
-            );
-        }
-
-        if cancelled.load(Ordering::Relaxed) {
+        if outcome.cancelled {
             let _ = app_for_thread.emit(
                 "search-cancelled",
                 SearchCancelledPayload {
@@ -415,9 +573,9 @@ fn start_search(
                 "search-finished",
                 SearchFinishedPayload {
                     session_id: id_for_thread.clone(),
-                    scanned_count,
-                    result_count,
-                    skipped_count,
+                    scanned_count: outcome.scanned_count,
+                    result_count: outcome.result_count,
+                    skipped_count: outcome.skipped_count,
                     duration_ms: started.elapsed().as_millis(),
                 },
             );
@@ -445,10 +603,10 @@ fn cancel_search(registry: State<'_, SearchRegistry>, session_id: String) -> Res
 
 fn validated_allowed_file(
     allowed_roots: &AllowedRoots,
-    root_path: &str,
-    path: &str,
+    root_path_key: &str,
+    path_key: &str,
 ) -> Result<PathBuf, String> {
-    let root = Path::new(root_path)
+    let root = decode_path(root_path_key)?
         .canonicalize()
         .map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
 
@@ -461,7 +619,8 @@ fn validated_allowed_file(
         return Err("Der Suchort wurde in dieser Sitzung nicht freigegeben.".into());
     }
 
-    let validated = canonical_child(&root, Path::new(path))?;
+    let file = decode_path(path_key)?;
+    let validated = canonical_child(&root, &file)?;
     if !validated.is_file() {
         return Err("Die ausgewählte Datei ist nicht mehr vorhanden.".into());
     }
@@ -470,14 +629,12 @@ fn validated_allowed_file(
 
 #[tauri::command]
 fn open_file(
-    app: AppHandle,
     allowed_roots: State<'_, AllowedRoots>,
-    root_path: String,
-    path: String,
+    root_path_key: String,
+    path_key: String,
 ) -> Result<(), String> {
-    let file = validated_allowed_file(&allowed_roots, &root_path, &path)?;
-    app.opener()
-        .open_path(file.to_string_lossy().into_owned(), None::<&str>)
+    let file = validated_allowed_file(&allowed_roots, &root_path_key, &path_key)?;
+    open_system_path(&file, None::<&str>)
         .map_err(|error| format!("Datei konnte nicht geöffnet werden: {error}"))
 }
 
@@ -485,10 +642,10 @@ fn open_file(
 fn reveal_file(
     app: AppHandle,
     allowed_roots: State<'_, AllowedRoots>,
-    root_path: String,
-    path: String,
+    root_path_key: String,
+    path_key: String,
 ) -> Result<(), String> {
-    let file = validated_allowed_file(&allowed_roots, &root_path, &path)?;
+    let file = validated_allowed_file(&allowed_roots, &root_path_key, &path_key)?;
     app.opener()
         .reveal_item_in_dir(&file)
         .map_err(|error| format!("Datei konnte nicht im Dateimanager angezeigt werden: {error}"))
@@ -551,10 +708,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_child, classify, matches_name, normalize_query, should_emit_progress,
-        validate_export_lines, MAX_EXPORT_TOTAL_BYTES,
+        canonical_child, classify, decode_path, encode_path, matches_name, normalize_query,
+        register_search, scan_directory, should_emit_progress, validate_export_lines,
+        validate_query, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
+        MAX_QUERY_TOKENS,
     };
-    use std::{fs, path::PathBuf, time::SystemTime};
+    use std::{
+        collections::HashMap,
+        fs,
+        path::PathBuf,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        time::SystemTime,
+    };
 
     fn temp_test_dir(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -571,6 +739,149 @@ mod tests {
         let tokens = normalize_query("Urlaub 2025");
         assert!(matches_name("Urlaub_2025_Berlin.jpg", &tokens));
         assert!(!matches_name("Urlaub_Berlin.jpg", &tokens));
+    }
+
+    #[test]
+    fn query_validation_rejects_empty_oversized_and_over_tokenized_input() {
+        assert!(validate_query("  \t ").is_err());
+        assert!(validate_query(&"x".repeat(MAX_QUERY_BYTES + 1)).is_err());
+        assert!(validate_query(&vec!["x"; MAX_QUERY_TOKENS + 1].join(" ")).is_err());
+        assert_eq!(validate_query("Urlaub 2025").expect("valid query").len(), 2);
+    }
+
+    #[test]
+    fn search_registry_rejects_duplicates_and_excess_sessions() {
+        let mut sessions = HashMap::new();
+        for index in 0..MAX_ACTIVE_SEARCHES {
+            register_search(
+                &mut sessions,
+                format!("session-{index}"),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .expect("session within limit");
+        }
+        assert!(register_search(
+            &mut sessions,
+            "session-0".into(),
+            Arc::new(AtomicBool::new(false))
+        )
+        .is_err());
+        assert!(register_search(
+            &mut sessions,
+            "session-over-limit".into(),
+            Arc::new(AtomicBool::new(false))
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn path_key_round_trips_regular_path() {
+        let path = PathBuf::from("folder").join("datei.txt");
+        assert_eq!(decode_path(&encode_path(&path)).expect("decode path"), path);
+        assert!(decode_path("invalid:key").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_key_round_trips_non_utf8_path() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = PathBuf::from(std::ffi::OsString::from_vec(vec![b'f', b'o', 0x80]));
+        assert_eq!(
+            decode_path(&encode_path(&path)).expect("decode non-UTF-8 path"),
+            path
+        );
+    }
+
+    #[test]
+    fn scanner_batches_matches_and_honors_result_limit() {
+        let root = temp_test_dir("scan-batches");
+        let nested = root.join("nested");
+        fs::create_dir(&nested).expect("create nested directory");
+        for index in 0..5 {
+            fs::write(nested.join(format!("urlaub-{index}.txt")), b"match").expect("write match");
+        }
+        fs::write(root.join("other.txt"), b"no match").expect("write non-match");
+
+        let cancelled = AtomicBool::new(false);
+        let mut batch_sizes = Vec::new();
+        let outcome = scan_directory(
+            root.clone(),
+            &normalize_query("urlaub"),
+            2,
+            3,
+            &cancelled,
+            |event| {
+                if let ScanEvent::Batch { items, .. } = event {
+                    batch_sizes.push(items.len());
+                }
+            },
+        );
+
+        assert_eq!(batch_sizes, vec![2, 1]);
+        assert_eq!(outcome.result_count, 3);
+        assert!(!outcome.cancelled);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scanner_flushes_batch_when_cancelled() {
+        let root = temp_test_dir("scan-cancel");
+        for index in 0..300 {
+            fs::write(root.join(format!("match-{index}.txt")), b"match").expect("write match");
+        }
+
+        let cancelled = AtomicBool::new(false);
+        let mut emitted_items = 0usize;
+        let outcome = scan_directory(
+            root.clone(),
+            &normalize_query("match"),
+            500,
+            1_000,
+            &cancelled,
+            |event| match event {
+                ScanEvent::Batch { items, .. } => emitted_items += items.len(),
+                ScanEvent::Progress { .. } => cancelled.store(true, Ordering::Relaxed),
+            },
+        );
+
+        assert_eq!(emitted_items, 250);
+        assert_eq!(outcome.result_count, 250);
+        assert!(outcome.cancelled);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn scanner_counts_missing_directory_as_skipped() {
+        let root = temp_test_dir("scan-missing");
+        fs::remove_dir_all(&root).expect("remove scan root");
+        let cancelled = AtomicBool::new(false);
+        let outcome = scan_directory(root, &normalize_query("match"), 2, 10, &cancelled, |_| {});
+        assert_eq!(outcome.skipped_count, 1);
+        assert_eq!(outcome.result_count, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scanner_skips_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_test_dir("scan-symlink");
+        let target = root.join("match.txt");
+        fs::write(&target, b"match").expect("write target");
+        symlink(&target, root.join("match-link.txt")).expect("create symlink");
+        let cancelled = AtomicBool::new(false);
+        let outcome = scan_directory(
+            root.clone(),
+            &normalize_query("match"),
+            2,
+            10,
+            &cancelled,
+            |_| {},
+        );
+        assert_eq!(outcome.result_count, 1);
+        assert_eq!(outcome.skipped_count, 1);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
