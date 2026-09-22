@@ -21,6 +21,7 @@ interface FileEntry {
   id: string;
   displayName: string;
   path: string;
+  pathKey: string;
   extension: string;
   sizeBytes: number;
   modifiedAt: number | null;
@@ -29,10 +30,15 @@ interface FileEntry {
 
 interface SearchRequest {
   sessionId: string;
-  rootPath: string;
+  rootPathKey: string;
   query: string;
   batchSize: number;
   maxResults: number;
+}
+
+interface PickedRoot {
+  path: string;
+  pathKey: string;
 }
 
 interface SearchBatchPayload {
@@ -61,6 +67,7 @@ interface SearchCancelledPayload {
 interface AppState {
   query: string;
   sourcePath: string | null;
+  sourcePathKey: string | null;
   sourceLabel: string;
   results: FileEntry[];
   selectedIds: Set<string>;
@@ -77,6 +84,7 @@ interface AppState {
 const initialState: AppState = {
   query: "urlaub 2025",
   sourcePath: null,
+  sourcePathKey: null,
   sourceLabel: "Ordner wählen",
   results: [],
   selectedIds: new Set(),
@@ -154,8 +162,8 @@ async function getPlatformCapabilities(): Promise<PlatformCapabilities> {
   return invoke<PlatformCapabilities>("platform_capabilities");
 }
 
-async function pickDirectory(): Promise<string | null> {
-  return invoke<string | null>("pick_search_root");
+async function pickDirectory(): Promise<PickedRoot | null> {
+  return invoke<PickedRoot | null>("pick_search_root");
 }
 
 async function pickFiles(): Promise<string[]> {
@@ -176,12 +184,12 @@ async function cancelSearch(sessionId: string): Promise<void> {
   await invoke("cancel_search", { sessionId });
 }
 
-async function openFile(rootPath: string, path: string): Promise<void> {
-  await invoke("open_file", { rootPath, path });
+async function openFile(rootPathKey: string, pathKey: string): Promise<void> {
+  await invoke("open_file", { rootPathKey, pathKey });
 }
 
-async function revealFile(rootPath: string, path: string): Promise<void> {
-  await invoke("reveal_file", { rootPath, path });
+async function revealFile(rootPathKey: string, pathKey: string): Promise<void> {
+  await invoke("reveal_file", { rootPathKey, pathKey });
 }
 
 async function exportResults(lines: string[]): Promise<boolean> {
@@ -375,10 +383,11 @@ function render(): void {
 async function chooseSource(): Promise<void> {
   try {
     if (state.platform.canPickFolder) {
-      const path = await pickDirectory();
-      if (!path) return;
-      state.sourcePath = path;
-      state.sourceLabel = path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+      const root = await pickDirectory();
+      if (!root) return;
+      state.sourcePath = root.path;
+      state.sourcePathKey = root.pathKey;
+      state.sourceLabel = root.path.split(/[\\/]/).filter(Boolean).at(-1) ?? root.path;
       setStatus("Suchort gewählt", state.sourceLabel);
       render();
       return;
@@ -388,6 +397,7 @@ async function chooseSource(): Promise<void> {
       const files = await pickFiles();
       if (files.length === 0) return;
       state.sourcePath = null;
+      state.sourcePathKey = null;
       state.sourceLabel = `${files.length} Datei${files.length === 1 ? "" : "en"}`;
       setStatus("Mobile Quelle gewählt", "Dateisuche über ausgewählte Dateien folgt in der Mobile-Phase.");
       render();
@@ -410,7 +420,7 @@ async function runSearch(): Promise<void> {
     return;
   }
 
-  if (!state.sourcePath) {
+  if (!state.sourcePathKey) {
     setStatus("Suchort fehlt", "Bitte zuerst unter „Orte“ einen Ordner auswählen.", "error");
     return;
   }
@@ -434,7 +444,7 @@ async function runSearch(): Promise<void> {
   try {
     await startSearch({
       sessionId,
-      rootPath: state.sourcePath,
+      rootPathKey: state.sourcePathKey,
       query,
       batchSize: 250,
       maxResults: 20_000,
@@ -529,20 +539,20 @@ async function initialize(): Promise<void> {
   });
 
   ui.open.addEventListener("click", async () => {
-    if (!state.sourcePath) return;
+    if (!state.sourcePathKey) return;
     const files = selectedFiles().slice(0, 10);
     for (const file of files) {
-      await openFile(state.sourcePath, file.path).catch((error) =>
+      await openFile(state.sourcePathKey, file.pathKey).catch((error) =>
         setStatus("Datei konnte nicht geöffnet werden", safeMessage(error), "error"),
       );
     }
   });
 
   ui.reveal.addEventListener("click", async () => {
-    if (!state.sourcePath) return;
+    if (!state.sourcePathKey) return;
     const file = selectedFiles()[0];
     if (!file) return;
-    await revealFile(state.sourcePath, file.path).catch((error) =>
+    await revealFile(state.sourcePathKey, file.pathKey).catch((error) =>
       setStatus("Datei konnte nicht angezeigt werden", safeMessage(error), "error"),
     );
   });
