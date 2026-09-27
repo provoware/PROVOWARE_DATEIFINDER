@@ -5,8 +5,8 @@
 
   --window-width: 768px;
   --window-height: 512px;
-  --sidebar-width: 160px;
-  --gap: 8px;
+  --sidebar-width: 159px;
+  --gap: 4px;
   --radius-window: 15px;
   --radius-panel: 10px;
   --radius-small: 7px;
@@ -114,9 +114,9 @@ button:disabled {
 .workspace {
   min-width: 0;
   display: grid;
-  grid-template-rows: 68px minmax(0, 1fr) 62px;
+  grid-template-rows: 70px minmax(0, 1fr) 69px;
   gap: 0;
-  padding: 0 8px 8px;
+  padding: 0 11px 8px 9px;
 }
 
 .topbar {
