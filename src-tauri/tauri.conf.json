@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PROVOWARE DateiFinder",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "de.provoware.dateifinder",
   "build": {
     "beforeDevCommand": "npm run dev",

@@ -31,10 +31,12 @@ Kurzer Arbeitsvertrag für automatisierte Änderungen.
 - `Cargo.toml` und `package.json` gemeinsam aktualisieren.
 
 ### Vor Release
+- `node --test tests/hardening/source-contracts.mjs`
 - `npm run check`
-- `cargo fmt --check`
-- `cargo clippy -D warnings`
-- `cargo test`
+- `npm run test:visual`
+- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check`
+- `cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings`
+- `cargo test --locked --manifest-path src-tauri/Cargo.toml`
 - installierbaren Build frisch testen
 - Debugrechte/Logs kontrollieren
 

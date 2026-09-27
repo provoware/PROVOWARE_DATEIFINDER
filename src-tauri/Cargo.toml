@@ -1,6 +1,6 @@
 [package]
 name = "provoware-dateifinder"
-version = "0.1.0"
+version = "0.1.1"
 description = "PROVOWARE DateiFinder"
 authors = ["PROVOWARE"]
 edition = "2021"
