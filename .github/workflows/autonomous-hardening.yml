@@ -84,7 +84,7 @@ jobs:
       - name: 200%-LAYOUT - critical controls remain reachable
         run: npx playwright test --config=playwright.hardening.config.ts --grep "200-percent"
 
-      - name: GOLDEN - original 768x512 regression stays unchanged
+      - name: GOLDEN - approved 768x512 regression stays stable
         run: npm run test:visual
 
       - name: Post-Merge-Evidence candidate report
@@ -104,6 +104,6 @@ jobs:
             echo "- SECURITY: root escape + symlink escape + export bounds"
             echo "- UI-E2E: static application acceptance matrix"
             echo "- 200%-LAYOUT: critical-control reachability"
-            echo "- GOLDEN: original 768x512 pixel regression"
+            echo "- GOLDEN: approved 768x512 pixel regression"
           } | tee hardening-evidence.md
           cat hardening-evidence.md >> "$GITHUB_STEP_SUMMARY"

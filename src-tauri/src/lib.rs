@@ -21,6 +21,7 @@ const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 const MAX_QUERY_BYTES: usize = 4_096;
 const MAX_QUERY_TOKENS: usize = 64;
 const MAX_ACTIVE_SEARCHES: usize = 4;
+const MAX_ACTIVE_SEARCHES: usize = 8;
 const PROGRESS_INTERVAL: usize = 250;
 
 #[derive(Clone, Default)]
@@ -256,6 +257,21 @@ fn canonical_child(root: &Path, child: &Path) -> Result<PathBuf, String> {
 
 fn should_emit_progress(scanned_count: usize, last_progress: usize) -> bool {
     scanned_count.saturating_sub(last_progress) >= PROGRESS_INTERVAL
+}
+
+fn register_search_session(
+    sessions: &mut HashMap<String, Arc<AtomicBool>>,
+    id: String,
+    cancelled: Arc<AtomicBool>,
+) -> Result<(), String> {
+    if sessions.contains_key(&id) {
+        return Err("Diese Suchsitzung existiert bereits.".into());
+    }
+    if sessions.len() >= MAX_ACTIVE_SEARCHES {
+        return Err("Zu viele Suchläufe sind gleichzeitig aktiv.".into());
+    }
+    sessions.insert(id, cancelled);
+    Ok(())
 }
 
 fn validate_export_lines(lines: &[String]) -> Result<usize, String> {
@@ -520,7 +536,7 @@ fn start_search(
             .0
             .lock()
             .map_err(|_| "Interner Suchstatus ist blockiert.".to_string())?;
-        register_search(&mut sessions, id.clone(), cancelled.clone())?;
+        register_search_session(&mut sessions, id.clone(), cancelled.clone())?;
     }
 
     let app_for_thread = app.clone();
@@ -708,19 +724,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_child, classify, decode_path, encode_path, matches_name, normalize_query,
-        register_search, scan_directory, should_emit_progress, validate_export_lines,
-        validate_query, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
-        MAX_QUERY_TOKENS,
+        canonical_child, classify, matches_name, normalize_query, register_search_session,
+        should_emit_progress, validate_export_lines, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
     };
     use std::{
         collections::HashMap,
         fs,
         path::PathBuf,
-        sync::{
-            atomic::{AtomicBool, Ordering},
-            Arc,
-        },
+        sync::{atomic::AtomicBool, Arc},
         time::SystemTime,
     };
 
@@ -906,6 +917,33 @@ mod tests {
         assert!(should_emit_progress(250, 0));
         assert!(should_emit_progress(500, 250));
         assert!(!should_emit_progress(499, 250));
+    }
+
+    #[test]
+    fn search_registry_rejects_duplicate_and_excess_sessions() {
+        let mut sessions = HashMap::new();
+        for index in 0..MAX_ACTIVE_SEARCHES {
+            register_search_session(
+                &mut sessions,
+                format!("session-{index}"),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .expect("session within limit");
+        }
+
+        assert!(register_search_session(
+            &mut sessions,
+            "session-0".into(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .is_err());
+        assert!(register_search_session(
+            &mut sessions,
+            "session-over-limit".into(),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .is_err());
+        assert_eq!(sessions.len(), MAX_ACTIVE_SEARCHES);
     }
 
     #[test]

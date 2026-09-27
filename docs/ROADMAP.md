@@ -14,10 +14,10 @@
 
 ## P1 — Visual Master
 
-- [ ] Cyan-Referenz gegen 768×512 Golden Reference vermessen
-- [ ] Screenshot-Harness auf Fixture-Daten
-- [ ] Pixel-Diff für Cyan
-- [ ] Purple/Green/Orange ohne Layoutshift
+- [x] Cyan-Referenz gegen 768×512 Golden Reference vermessen
+- [x] Screenshot-Harness auf Fixture-Daten
+- [x] Pixel-Diff für Cyan
+- [x] Purple/Green/Orange ohne Layoutshift
 - [ ] lokale Fonts und kontrollierte SVG-Icons
 
 ## P2 — Desktop Hardening
