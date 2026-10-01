@@ -11,6 +11,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 1420",
     "tauri": "tauri",
     "check": "npm run typecheck && npm run build",
+    "test:ui": "playwright test --config=playwright.hardening.config.ts",
     "test:visual": "playwright test --project=chromium",
     "test:visual:update": "playwright test --project=chromium --update-snapshots"
   },

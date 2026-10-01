@@ -15,11 +15,11 @@ export default defineConfig({
     reducedMotion: "reduce",
     viewport: { width: 768, height: 512 },
     deviceScaleFactor: 1,
-    javaScriptEnabled: false,
+    javaScriptEnabled: true,
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
   webServer: {
-    command: "npm run dev -- --strictPort",
+    command: "npm run dev -- --strictPort --mode test",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: false,
     timeout: 30_000,

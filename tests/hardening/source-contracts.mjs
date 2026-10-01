@@ -17,6 +17,11 @@ test("frontend capability fallback is fail-closed", () => {
   assert.match(frontend, /Dateizugriffe bleiben aus Sicherheitsgründen deaktiviert/u);
 });
 
+test("picked-file capability stays disabled until picked files are searchable", () => {
+  assert.match(rust, /supports_picked_files:\s*false/u);
+  assert.doesNotMatch(frontend, /pickFiles\s*\(/u);
+});
+
 test("stale search events are rejected by session id", () => {
   const guards = frontend.match(/payload\.sessionId !== state\.activeSessionId/g) ?? [];
   assert.ok(guards.length >= 4, `expected >=4 stale-event guards, got ${guards.length}`);

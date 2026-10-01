@@ -2,7 +2,6 @@ import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
@@ -158,29 +157,40 @@ interface SearchListeners {
   onCancelled(payload: SearchCancelledPayload): void;
 }
 
+interface BrowserTestAdapter {
+  getPlatformCapabilities(): Promise<PlatformCapabilities>;
+  pickDirectory(): Promise<PickedRoot | null>;
+  startSearch(request: SearchRequest): Promise<void>;
+  cancelSearch(sessionId: string): Promise<void>;
+  listenSearchEvents(listeners: SearchListeners): Promise<UnlistenFn[]>;
+}
+
+declare global {
+  interface Window {
+    __DATEIFINDER_TEST_ADAPTER__?: Partial<BrowserTestAdapter>;
+  }
+}
+
+const browserTestAdapter = import.meta.env.MODE === "test" ? window.__DATEIFINDER_TEST_ADAPTER__ : undefined;
+let searchEventsAvailable = false;
+
 async function getPlatformCapabilities(): Promise<PlatformCapabilities> {
+  if (browserTestAdapter?.getPlatformCapabilities) return browserTestAdapter.getPlatformCapabilities();
   return invoke<PlatformCapabilities>("platform_capabilities");
 }
 
 async function pickDirectory(): Promise<PickedRoot | null> {
+  if (browserTestAdapter?.pickDirectory) return browserTestAdapter.pickDirectory();
   return invoke<PickedRoot | null>("pick_search_root");
 }
 
-async function pickFiles(): Promise<string[]> {
-  const result = await open({
-    directory: false,
-    multiple: true,
-    title: "Dateien auswählen",
-  });
-  if (!result) return [];
-  return Array.isArray(result) ? result : [result];
-}
-
 async function startSearch(request: SearchRequest): Promise<void> {
+  if (browserTestAdapter?.startSearch) return browserTestAdapter.startSearch(request);
   await invoke("start_search", { request });
 }
 
 async function cancelSearch(sessionId: string): Promise<void> {
+  if (browserTestAdapter?.cancelSearch) return browserTestAdapter.cancelSearch(sessionId);
   await invoke("cancel_search", { sessionId });
 }
 
@@ -209,6 +219,7 @@ async function saveTheme(theme: Theme): Promise<void> {
 }
 
 async function listenSearchEvents(listeners: SearchListeners): Promise<UnlistenFn[]> {
+  if (browserTestAdapter?.listenSearchEvents) return browserTestAdapter.listenSearchEvents(listeners);
   return Promise.all([
     listen<SearchBatchPayload>("search-batch", ({ payload }) => listeners.onBatch(payload)),
     listen<SearchProgressPayload>("search-progress", ({ payload }) => listeners.onProgress(payload)),
@@ -251,6 +262,7 @@ const ui = {
   statusTitle: byId<HTMLElement>("status-title"),
   statusDetail: byId<HTMLElement>("status-detail"),
   statusIcon: byId<HTMLElement>("status-icon"),
+  statusProgress: byId<HTMLElement>("status-progress"),
   cancel: byId<HTMLButtonElement>("cancel-search"),
   open: byId<HTMLButtonElement>("open-selected"),
   reveal: byId<HTMLButtonElement>("reveal-selected"),
@@ -271,6 +283,14 @@ function setStatus(title: string, detail: string, tone: "ready" | "working" | "e
   ui.statusDetail.textContent = detail;
   ui.statusIcon.textContent = tone === "error" ? "!" : tone === "working" ? "…" : "✓";
   ui.statusIcon.dataset.tone = tone;
+  ui.statusIcon.closest(".status-block")?.setAttribute("data-tone", tone);
+  ui.statusProgress.hidden = tone !== "working";
+  ui.statusProgress.setAttribute("aria-valuetext", tone === "working" ? detail : title);
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs < 1_000) return `${durationMs} ms`;
+  return `${(durationMs / 1_000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} s`;
 }
 
 function currentPreview(): FileEntry | null {
@@ -394,17 +414,6 @@ async function chooseSource(): Promise<void> {
       return;
     }
 
-    if (state.platform.supportsPickedFiles) {
-      const files = await pickFiles();
-      if (files.length === 0) return;
-      state.sourcePath = null;
-      state.sourcePathKey = null;
-      state.sourceLabel = `${files.length} Datei${files.length === 1 ? "" : "en"}`;
-      setStatus("Mobile Quelle gewählt", "Dateisuche über ausgewählte Dateien folgt in der Mobile-Phase.");
-      render();
-      return;
-    }
-
     setStatus("Nicht verfügbar", "Diese Plattform bietet aktuell keinen unterstützten Suchort.", "error");
   } catch (error) {
     setStatus("Quelle konnte nicht geöffnet werden", safeMessage(error), "error");
@@ -414,6 +423,11 @@ async function chooseSource(): Promise<void> {
 async function runSearch(): Promise<void> {
   const query = ui.query.value.trim();
   state.query = query;
+
+  if (!searchEventsAvailable) {
+    setStatus("Suche nicht verfügbar", "Die erforderlichen Suchereignisse konnten nicht registriert werden.", "error");
+    return;
+  }
 
   if (!query) {
     setStatus("Suchbegriff fehlt", "Bitte mindestens ein Wort eingeben.", "error");
@@ -485,7 +499,11 @@ async function initialize(): Promise<void> {
     onProgress(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
       state.scannedCount = payload.scannedCount;
-      setStatus("Suche läuft", `${payload.scannedCount.toLocaleString("de-DE")} Einträge geprüft …`, "working");
+      setStatus(
+        "Suche läuft",
+        `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${state.results.length.toLocaleString("de-DE")} Treffer`,
+        "working",
+      );
     },
     onFinished(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
@@ -495,7 +513,7 @@ async function initialize(): Promise<void> {
       const skipped = payload.skippedCount > 0 ? ` · ${payload.skippedCount} übersprungen` : "";
       setStatus(
         `${payload.resultCount} ${payload.resultCount === 1 ? "Datei" : "Dateien"} gefunden`,
-        `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${payload.durationMs} ms${skipped}`,
+        `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${formatDuration(payload.durationMs)}${skipped}`,
       );
       render();
     },
@@ -506,6 +524,11 @@ async function initialize(): Promise<void> {
       setStatus("Suche abgebrochen", `${state.results.length} bisherige Treffer bleiben sichtbar.`);
       render();
     },
+  }).then(() => {
+    searchEventsAvailable = true;
+  }).catch((error) => {
+    console.error("Search events unavailable", error);
+    setStatus("Suchereignisse nicht verfügbar", "Die Oberfläche bleibt bedienbar; Suchen ist derzeit nicht möglich.", "error");
   });
 
   byId<HTMLButtonElement>("choose-source-nav").addEventListener("click", chooseSource);
@@ -516,7 +539,14 @@ async function initialize(): Promise<void> {
     void runSearch();
   });
   ui.cancel.addEventListener("click", () => {
-    if (state.activeSessionId) void cancelSearch(state.activeSessionId);
+    if (!state.activeSessionId) return;
+    const sessionId = state.activeSessionId;
+    ui.cancel.disabled = true;
+    setStatus("Suche wird abgebrochen", `${state.scannedCount.toLocaleString("de-DE")} Einträge geprüft …`, "working");
+    void cancelSearch(sessionId).catch((error) => {
+      ui.cancel.disabled = false;
+      setStatus("Abbruch fehlgeschlagen", `${safeMessage(error)} Bitte erneut versuchen.`, "error");
+    });
   });
   ui.sort.addEventListener("change", () => {
     state.sort = ui.sort.value as SortMode;
