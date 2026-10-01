@@ -2,6 +2,103 @@ import { expect, test } from "@playwright/test";
 
 const themes = ["cyan", "purple", "green", "orange"] as const;
 
+async function installSearchAdapter(page: import("@playwright/test").Page, listenerFailure = false) {
+  await page.addInitScript((failListeners) => {
+    const runtime = window as typeof window & {
+      __searchListeners?: {
+        onBatch(payload: unknown): void;
+        onProgress(payload: unknown): void;
+        onFinished(payload: unknown): void;
+      };
+    };
+
+    window.__DATEIFINDER_TEST_ADAPTER__ = {
+      async getPlatformCapabilities() {
+        return {
+          platform: "browser-test",
+          canPickFolder: true,
+          canOpenFile: false,
+          canRevealFile: false,
+          canSearchRecursively: true,
+          supportsPickedFiles: false,
+        };
+      },
+      async pickDirectory() {
+        return { path: "/test/Dokumente", pathKey: "test-root" };
+      },
+      async listenSearchEvents(listeners) {
+        if (failListeners) throw new Error("listener registration failed");
+        runtime.__searchListeners = listeners;
+        return [];
+      },
+      async startSearch(request) {
+        runtime.__searchListeners?.onBatch({
+          sessionId: request.sessionId,
+          scannedCount: 1,
+          items: [{
+            id: "invoice",
+            displayName: "rechnung-2025.pdf",
+            path: "/test/Dokumente/rechnung-2025.pdf",
+            pathKey: "invoice-key",
+            extension: "pdf",
+            sizeBytes: 2048,
+            modifiedAt: 1_735_689_600_000,
+            kind: "document",
+          }],
+        });
+        runtime.__searchListeners?.onProgress({ sessionId: request.sessionId, scannedCount: 1 });
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        runtime.__searchListeners?.onFinished({
+          sessionId: request.sessionId,
+          scannedCount: 1,
+          resultCount: 1,
+          skippedCount: 0,
+          durationMs: 4,
+        });
+      },
+      async cancelSearch() {},
+    };
+  }, listenerFailure);
+}
+
+test("interactive search uses the injected platform contract and handles events", async ({ page }) => {
+  await installSearchAdapter(page);
+  await page.goto("/");
+
+  await page.locator("#choose-source-nav").click();
+  await expect(page.locator("#source-label")).toHaveText("Dokumente");
+  await page.locator("#query-input").fill("rechnung 2025");
+  await page.locator("#search-button").click();
+
+  await expect(page.locator("#status-progress")).toBeVisible();
+  await expect(page.locator("#status-detail")).toHaveText("1 geprüft · 1 Treffer");
+  await expect(page.locator(".result-row")).toHaveCount(1);
+  await expect(page.locator(".result-row")).toContainText("rechnung-2025.pdf");
+  await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+  await expect(page.locator("#status-detail")).toContainText("4 ms");
+  await expect(page.locator("#status-progress")).toBeHidden();
+  await expect(page.locator("#cancel-search")).toBeDisabled();
+});
+
+test("listener failure reports an error without disabling DOM interactions", async ({ page }) => {
+  await installSearchAdapter(page, true);
+  await page.goto("/");
+
+  await expect(page.locator("#status-title")).toHaveText("Suchereignisse nicht verfügbar");
+  await page.locator('[data-query-chip="rechnung"]').click();
+  await expect(page.locator("#query-input")).toHaveValue("rechnung");
+  await page.locator("#search-help-button").click();
+  await expect(page.locator("#search-help-dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("Suche nicht verfügbar");
+  await expect(page.locator(".status-block")).toHaveAttribute("data-tone", "error");
+  await expect(page.locator("#status-progress")).toBeHidden();
+  await expect(page.locator("#cancel-search")).toBeDisabled();
+});
+
 test("reference shell stays inside 768x512", async ({ page }) => {
   await page.goto("/");
   const shell = page.locator(".app-shell");
@@ -80,6 +177,8 @@ test("keyboard focus targets remain present and labelled", async ({ page }) => {
   await expect(page.locator("#cancel-search")).toHaveAttribute("aria-label", "Suche abbrechen");
   await expect(page.locator("#window-close")).toHaveAttribute("aria-label", "Fenster schließen");
   await expect(page.locator(".status-block")).toHaveAttribute("role", "status");
+  await expect(page.locator("#status-progress")).toHaveAttribute("role", "progressbar");
+  await expect(page.locator("#status-progress")).toHaveAttribute("aria-label", "Suchfortschritt");
   await expect(page.locator("#result-count")).toHaveAttribute("aria-live", "polite");
 });
 

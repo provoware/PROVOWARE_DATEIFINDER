@@ -452,7 +452,7 @@ fn platform_capabilities() -> PlatformCapabilities {
         can_open_file: !mobile,
         can_reveal_file: !mobile,
         can_search_recursively: !mobile,
-        supports_picked_files: mobile,
+        supports_picked_files: false,
     }
 }
 
