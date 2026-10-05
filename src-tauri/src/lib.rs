@@ -21,7 +21,6 @@ const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 const MAX_QUERY_BYTES: usize = 4_096;
 const MAX_QUERY_TOKENS: usize = 64;
 const MAX_ACTIVE_SEARCHES: usize = 4;
-const MAX_ACTIVE_SEARCHES: usize = 8;
 const PROGRESS_INTERVAL: usize = 250;
 
 #[derive(Clone, Default)]
@@ -294,21 +293,6 @@ fn validate_export_lines(lines: &[String]) -> Result<usize, String> {
     }
 
     Ok(total_bytes)
-}
-
-fn register_search(
-    sessions: &mut HashMap<String, Arc<AtomicBool>>,
-    id: String,
-    cancelled: Arc<AtomicBool>,
-) -> Result<(), String> {
-    if sessions.contains_key(&id) {
-        return Err("Diese Suchsitzung existiert bereits.".into());
-    }
-    if sessions.len() >= MAX_ACTIVE_SEARCHES {
-        return Err("Zu viele gleichzeitige Suchvorgänge.".into());
-    }
-    sessions.insert(id, cancelled);
-    Ok(())
 }
 
 enum ScanEvent {
