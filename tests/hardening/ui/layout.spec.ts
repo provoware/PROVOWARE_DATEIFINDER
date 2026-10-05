@@ -77,7 +77,27 @@ test("interactive search uses the injected platform contract and handles events"
   await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
   await expect(page.locator("#status-detail")).toContainText("4 ms");
   await expect(page.locator("#status-progress")).toBeHidden();
+  await expect(page.locator("#status-announcer")).toHaveText("1 Datei gefunden. 1 geprüft · 4 ms");
   await expect(page.locator("#cancel-search")).toBeDisabled();
+});
+
+test("result selection keeps keyboard focus and exposes a concise selection summary", async ({ page }) => {
+  await installSearchAdapter(page);
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+
+  const row = page.locator(".result-row").first();
+  await expect(row).toBeVisible();
+  await row.focus();
+  await row.click();
+
+  await expect(row).toBeFocused();
+  await expect(row).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#selection-summary")).toHaveText("1 Datei ausgewählt.");
+  await expect(page.locator(".row-check")).toHaveAttribute("aria-hidden", "true");
+  await expect(page.locator(".file-icon")).toHaveAttribute("aria-hidden", "true");
 });
 
 test("listener failure reports an error without disabling DOM interactions", async ({ page }) => {
@@ -172,14 +192,20 @@ test("200-percent zoom equivalent keeps critical controls reachable", async ({ p
 test("keyboard focus targets remain present and labelled", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#query-input")).toHaveAttribute("aria-label", "Dateinamen suchen");
+  await expect(page.locator("#query-input")).toHaveAttribute("aria-describedby", "query-help");
   await expect(page.locator("#sort-select")).toHaveAttribute("aria-label", "Sortierung");
   await expect(page.locator("#theme-select")).toHaveAttribute("aria-label", "Farbschema");
   await expect(page.locator("#cancel-search")).toHaveAttribute("aria-label", "Suche abbrechen");
   await expect(page.locator("#window-close")).toHaveAttribute("aria-label", "Fenster schließen");
-  await expect(page.locator(".status-block")).toHaveAttribute("role", "status");
+  await expect(page.locator(".status-block")).not.toHaveAttribute("role", "status");
+  await expect(page.locator("#status-announcer")).toHaveAttribute("role", "status");
+  await expect(page.locator("#status-announcer")).toHaveAttribute("aria-live", "polite");
   await expect(page.locator("#status-progress")).toHaveAttribute("role", "progressbar");
   await expect(page.locator("#status-progress")).toHaveAttribute("aria-label", "Suchfortschritt");
-  await expect(page.locator("#result-count")).toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#result-count")).not.toHaveAttribute("aria-live", "polite");
+  await expect(page.locator("#results-list")).toHaveAttribute("role", "group");
+  await expect(page.locator("#results-list")).toHaveAttribute("aria-busy", "false");
+  await expect(page.locator("#selection-summary")).toHaveAttribute("aria-live", "polite");
 });
 
 test("hidden empty state does not override native hidden semantics", async ({ page }) => {
