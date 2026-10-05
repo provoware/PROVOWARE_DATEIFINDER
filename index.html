@@ -56,7 +56,8 @@
 
             <section class="panel results-panel" aria-labelledby="results-title">
               <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
-              <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary" aria-busy="false"></div>
+              <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
+              <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary result-limit-notice" aria-busy="false"></div>
               <p id="selection-summary" class="sr-only" aria-live="polite" aria-atomic="true">Keine Datei ausgewählt.</p>
               <div id="empty-state" class="empty-state"><strong>Noch kein Suchort gewählt.</strong><span>Wähle links unter „Orte“ zuerst einen Ordner.</span></div>
             </section>

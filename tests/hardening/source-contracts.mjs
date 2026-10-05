@@ -27,11 +27,12 @@ test("stale search events are rejected by session id", () => {
   assert.ok(guards.length >= 4, `expected >=4 stale-event guards, got ${guards.length}`);
 });
 
-test("frontend keeps a bounded result render cap", () => {
-  const match = frontend.match(/VISIBLE_RESULT_LIMIT\s*=\s*([\d_]+)/u);
-  assert.ok(match, "VISIBLE_RESULT_LIMIT missing");
-  const limit = Number(match[1].replaceAll("_", ""));
-  assert.ok(limit > 0 && limit <= 2_000, `unsafe visible result limit: ${limit}`);
+test("frontend virtualizes large result sets instead of rendering a fixed 2000-row cap", () => {
+  assert.match(frontend, /VIRTUAL_OVERSCAN_ROWS\s*=\s*8/u);
+  assert.match(frontend, /function visibleResultRange\(/u);
+  assert.match(frontend, /results-virtual-canvas/u);
+  assert.match(frontend, /mergeSortedResults\(state\.results, payload\.items, state\.sort\)/u);
+  assert.doesNotMatch(frontend, /VISIBLE_RESULT_LIMIT/u);
 });
 
 test("Rust search hard limits remain explicit", () => {
@@ -43,6 +44,17 @@ test("Rust search hard limits remain explicit", () => {
   assert.match(rust, /MAX_ACTIVE_SEARCHES:\s*usize\s*=\s*4/u);
   assert.match(rust, /validate_query\(&request\.query\)\?/u);
   assert.match(rust, /register_search_session\(&mut sessions, id\.clone\(\), cancelled\.clone\(\)\)\?/u);
+  assert.match(frontend, /SEARCH_RESULT_LIMIT\s*=\s*20_000/u);
+  assert.match(frontend, /maxResults:\s*SEARCH_RESULT_LIMIT/u);
+});
+
+test("result truncation is explicit from Rust through the UI", () => {
+  assert.match(rust, /pub limit_reached:\s*bool/u);
+  assert.match(rust, /limit_reached = true/u);
+  assert.match(rust, /limit_reached:\s*outcome\.limit_reached/u);
+  assert.match(frontend, /limitReached:\s*boolean/u);
+  assert.match(frontend, /Treffergrenze erreicht/u);
+  assert.match(frontend, /Anzeige und Export sind unvollständig/u);
 });
 
 test("file actions use lossless path keys instead of display paths", () => {
@@ -82,6 +94,9 @@ test("accessibility contracts remain enabled", () => {
   assert.match(css, /:focus-visible/u);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/u);
   assert.match(css, /\.footer-actions button \{[\s\S]*?min-height:\s*44px/u);
+  assert.match(css, /\.file-path,[\s\S]*?font-size:\s*11px/u);
+  assert.match(css, /\.status-block small \{[\s\S]*?font-size:\s*11px/u);
+  assert.match(css, /\.nav-item small \{[\s\S]*?font-size:\s*11px/u);
 });
 
 test("desktop minimum reference window remains 768x512", () => {

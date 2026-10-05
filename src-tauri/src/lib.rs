@@ -82,6 +82,7 @@ pub struct SearchFinishedPayload {
     pub result_count: usize,
     pub skipped_count: usize,
     pub duration_ms: u128,
+    pub limit_reached: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -310,6 +311,7 @@ struct ScanOutcome {
     result_count: usize,
     skipped_count: usize,
     cancelled: bool,
+    limit_reached: bool,
 }
 
 fn scan_directory<F>(
@@ -329,6 +331,7 @@ where
     let mut result_count = 0usize;
     let mut skipped_count = 0usize;
     let mut last_progress = 0usize;
+    let mut limit_reached = false;
 
     while let Some(directory) = queue.pop_front() {
         if cancelled.load(Ordering::Relaxed) {
@@ -406,6 +409,7 @@ where
             }
 
             if result_count >= max_results {
+                limit_reached = true;
                 queue.clear();
                 break;
             }
@@ -424,6 +428,7 @@ where
         result_count,
         skipped_count,
         cancelled: cancelled.load(Ordering::Relaxed),
+        limit_reached,
     }
 }
 
@@ -577,6 +582,7 @@ fn start_search(
                     result_count: outcome.result_count,
                     skipped_count: outcome.skipped_count,
                     duration_ms: started.elapsed().as_millis(),
+                    limit_reached: outcome.limit_reached,
                 },
             );
         }
@@ -795,6 +801,7 @@ mod tests {
 
         assert_eq!(batch_sizes, vec![2, 1]);
         assert_eq!(outcome.result_count, 3);
+        assert!(outcome.limit_reached);
         assert!(!outcome.cancelled);
         let _ = fs::remove_dir_all(root);
     }
@@ -822,6 +829,7 @@ mod tests {
 
         assert_eq!(emitted_items, 250);
         assert_eq!(outcome.result_count, 250);
+        assert!(!outcome.limit_reached);
         assert!(outcome.cancelled);
         let _ = fs::remove_dir_all(root);
     }
