@@ -2,8 +2,17 @@ import { expect, test } from "@playwright/test";
 
 const themes = ["cyan", "purple", "green", "orange"] as const;
 
-async function installSearchAdapter(page: import("@playwright/test").Page, listenerFailure = false) {
-  await page.addInitScript((failListeners) => {
+async function installSearchAdapter(
+  page: import("@playwright/test").Page,
+  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number } = {},
+) {
+  await page.addInitScript((testOptions) => {
+    const {
+      listenerFailure = false,
+      itemCount = 1,
+      limitReached = false,
+      reportedResultCount = itemCount,
+    } = testOptions;
     const runtime = window as typeof window & {
       __searchListeners?: {
         onBatch(payload: unknown): void;
@@ -27,38 +36,42 @@ async function installSearchAdapter(page: import("@playwright/test").Page, liste
         return { path: "/test/Dokumente", pathKey: "test-root" };
       },
       async listenSearchEvents(listeners) {
-        if (failListeners) throw new Error("listener registration failed");
+        if (listenerFailure) throw new Error("listener registration failed");
         runtime.__searchListeners = listeners;
         return [];
       },
       async startSearch(request) {
+        const items = Array.from({ length: itemCount }, (_, index) => ({
+          id: `invoice-${index}`,
+          displayName: index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`,
+          path: index === 0
+            ? "/test/Dokumente/rechnung-2025.pdf"
+            : `/test/Dokumente/rechnung-2025-${index}.pdf`,
+          pathKey: `invoice-key-${index}`,
+          extension: "pdf",
+          sizeBytes: 2048 + index,
+          modifiedAt: 1_735_689_600_000 + index,
+          kind: "document",
+        }));
         runtime.__searchListeners?.onBatch({
           sessionId: request.sessionId,
-          scannedCount: 1,
-          items: [{
-            id: "invoice",
-            displayName: "rechnung-2025.pdf",
-            path: "/test/Dokumente/rechnung-2025.pdf",
-            pathKey: "invoice-key",
-            extension: "pdf",
-            sizeBytes: 2048,
-            modifiedAt: 1_735_689_600_000,
-            kind: "document",
-          }],
+          scannedCount: itemCount,
+          items,
         });
-        runtime.__searchListeners?.onProgress({ sessionId: request.sessionId, scannedCount: 1 });
+        runtime.__searchListeners?.onProgress({ sessionId: request.sessionId, scannedCount: itemCount });
         await new Promise((resolve) => setTimeout(resolve, 500));
         runtime.__searchListeners?.onFinished({
           sessionId: request.sessionId,
-          scannedCount: 1,
-          resultCount: 1,
+          scannedCount: itemCount,
+          resultCount: reportedResultCount,
           skippedCount: 0,
           durationMs: 4,
+          limitReached,
         });
       },
       async cancelSearch() {},
     };
-  }, listenerFailure);
+  }, options);
 }
 
 test("interactive search uses the injected platform contract and handles events", async ({ page }) => {
@@ -100,8 +113,41 @@ test("result selection keeps keyboard focus and exposes a concise selection summ
   await expect(page.locator(".file-icon")).toHaveAttribute("aria-hidden", "true");
 });
 
+test("large result sets render only the visible virtual window", async ({ page }) => {
+  await installSearchAdapter(page, { itemCount: 5_000 });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+
+  await expect(page.locator("#result-count")).toContainText("5000");
+  await expect(page.locator(".results-virtual-canvas")).toBeVisible();
+  expect(await page.locator(".result-row").count()).toBeLessThan(40);
+
+  await page.locator("#results-list").evaluate((node) => {
+    node.scrollTop = node.scrollHeight;
+  });
+  await expect.poll(async () => page.locator(".result-row").count()).toBeLessThan(40);
+  await expect(page.locator(".result-row").last()).toContainText("rechnung-2025-4999.pdf");
+});
+
+test("result limit is clearly reported as incomplete", async ({ page }) => {
+  await installSearchAdapter(page, { itemCount: 10, limitReached: true, reportedResultCount: 20_000 });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+
+  await expect(page.locator("#result-limit-notice")).toBeVisible();
+  await expect(page.locator("#result-limit-notice")).toContainText("Weitere passende Dateien können vorhanden sein");
+  await expect(page.locator("#result-limit-notice")).toContainText("Export sind unvollständig");
+  await expect(page.locator("#status-title")).toHaveText("Treffergrenze erreicht");
+  await expect(page.locator(".status-block")).toHaveAttribute("data-tone", "warning");
+  await expect(page.locator("#export-results")).toHaveAttribute("title", /unvollständig/);
+});
+
 test("listener failure reports an error without disabling DOM interactions", async ({ page }) => {
-  await installSearchAdapter(page, true);
+  await installSearchAdapter(page, { listenerFailure: true });
   await page.goto("/");
 
   await expect(page.locator("#status-title")).toHaveText("Suchereignisse nicht verfügbar");
