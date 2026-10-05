@@ -57,6 +57,7 @@ interface SearchFinishedPayload {
   resultCount: number;
   skippedCount: number;
   durationMs: number;
+  limitReached: boolean;
 }
 
 interface SearchCancelledPayload {
@@ -76,6 +77,7 @@ interface AppState {
   activeSessionId: string | null;
   scannedCount: number;
   skippedCount: number;
+  limitReached: boolean;
   theme: Theme;
   platform: PlatformCapabilities;
 }
@@ -93,6 +95,7 @@ const initialState: AppState = {
   activeSessionId: null,
   scannedCount: 0,
   skippedCount: 0,
+  limitReached: false,
   theme: "cyan",
   platform: {
     platform: "unknown",
@@ -104,21 +107,58 @@ const initialState: AppState = {
   },
 };
 
-function sortResults(items: FileEntry[], mode: SortMode): FileEntry[] {
-  const next = [...items];
+function compareResults(mode: SortMode): (a: FileEntry, b: FileEntry) => number {
   const byName = (a: FileEntry, b: FileEntry) =>
     a.displayName.localeCompare(b.displayName, "de", { numeric: true, sensitivity: "base" });
 
   switch (mode) {
     case "name-asc":
-      return next.sort(byName);
+      return byName;
     case "name-desc":
-      return next.sort((a, b) => byName(b, a));
+      return (a, b) => byName(b, a);
     case "size-desc":
-      return next.sort((a, b) => b.sizeBytes - a.sizeBytes || byName(a, b));
+      return (a, b) => b.sizeBytes - a.sizeBytes || byName(a, b);
     case "modified-desc":
-      return next.sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0) || byName(a, b));
+      return (a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0) || byName(a, b);
   }
+}
+
+function sortResults(items: FileEntry[], mode: SortMode): FileEntry[] {
+  return [...items].sort(compareResults(mode));
+}
+
+function mergeSortedResults(existing: FileEntry[], incoming: FileEntry[], mode: SortMode): FileEntry[] {
+  if (existing.length === 0) return sortResults(incoming, mode);
+  if (incoming.length === 0) return existing;
+
+  const compare = compareResults(mode);
+  const right = sortResults(incoming, mode);
+  const merged = new Array<FileEntry>(existing.length + right.length);
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let targetIndex = 0;
+
+  while (leftIndex < existing.length && rightIndex < right.length) {
+    const leftItem = existing[leftIndex]!;
+    const rightItem = right[rightIndex]!;
+    if (compare(leftItem, rightItem) <= 0) {
+      merged[targetIndex++] = leftItem;
+      leftIndex += 1;
+    } else {
+      merged[targetIndex++] = rightItem;
+      rightIndex += 1;
+    }
+  }
+  while (leftIndex < existing.length) {
+    merged[targetIndex++] = existing[leftIndex]!;
+    leftIndex += 1;
+  }
+  while (rightIndex < right.length) {
+    merged[targetIndex++] = right[rightIndex]!;
+    rightIndex += 1;
+  }
+
+  return merged;
 }
 
 function isTheme(value: string): value is Theme {
@@ -243,8 +283,11 @@ async function closeWindow(): Promise<void> {
 const state: AppState = structuredClone(initialState);
 state.selectedIds = new Set<string>();
 
-const VISIBLE_RESULT_LIMIT = 2_000;
+const SEARCH_RESULT_LIMIT = 20_000;
+const VIRTUAL_OVERSCAN_ROWS = 8;
+const DEFAULT_RESULT_ROW_HEIGHT = 40;
 let resultRenderScheduled = false;
+let virtualRenderScheduled = false;
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -260,6 +303,7 @@ const ui = {
   mobileSource: byId<HTMLButtonElement>("mobile-source-button"),
   results: byId<HTMLElement>("results-list"),
   resultCount: byId<HTMLElement>("result-count"),
+  resultLimitNotice: byId<HTMLElement>("result-limit-notice"),
   empty: byId<HTMLElement>("empty-state"),
   statusTitle: byId<HTMLElement>("status-title"),
   statusDetail: byId<HTMLElement>("status-detail"),
@@ -285,12 +329,12 @@ const ui = {
 function setStatus(
   title: string,
   detail: string,
-  tone: "ready" | "working" | "error" = "ready",
+  tone: "ready" | "working" | "warning" | "error" = "ready",
   announce = true,
 ): void {
   ui.statusTitle.textContent = title;
   ui.statusDetail.textContent = detail;
-  ui.statusIcon.textContent = tone === "error" ? "!" : tone === "working" ? "…" : "✓";
+  ui.statusIcon.textContent = tone === "error" || tone === "warning" ? "!" : tone === "working" ? "…" : "✓";
   ui.statusIcon.dataset.tone = tone;
   ui.statusIcon.closest(".status-block")?.setAttribute("data-tone", tone);
   ui.statusProgress.hidden = tone !== "working";
@@ -336,25 +380,56 @@ function renderPreview(): void {
   ui.previewKind.textContent = file.extension ? file.extension.toUpperCase() : file.kind;
 }
 
-function renderResults(): void {
-  const previousScrollTop = ui.results.scrollTop;
+function resultRowHeight(): number {
+  const configured = Number.parseFloat(getComputedStyle(ui.results).getPropertyValue("--result-row-height"));
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_RESULT_ROW_HEIGHT;
+}
+
+function visibleResultRange(): { start: number; end: number; rowHeight: number } {
+  const rowHeight = resultRowHeight();
+  const viewportRows = Math.max(1, Math.ceil(ui.results.clientHeight / rowHeight));
+  const firstVisible = Math.floor(ui.results.scrollTop / rowHeight);
+  const start = Math.max(0, firstVisible - VIRTUAL_OVERSCAN_ROWS);
+  const end = Math.min(state.results.length, firstVisible + viewportRows + VIRTUAL_OVERSCAN_ROWS);
+  return { start, end, rowHeight };
+}
+
+function focusResultAt(index: number): void {
+  if (index < 0 || index >= state.results.length) return;
+  const rowHeight = resultRowHeight();
+  const top = index * rowHeight;
+  const bottom = top + rowHeight;
+  if (top < ui.results.scrollTop) ui.results.scrollTop = top;
+  if (bottom > ui.results.scrollTop + ui.results.clientHeight) {
+    ui.results.scrollTop = Math.max(0, bottom - ui.results.clientHeight);
+  }
+  renderVisibleResultRows();
+  const targetId = state.results[index]?.id;
+  const target = [...ui.results.querySelectorAll<HTMLButtonElement>(".result-row")]
+    .find((row) => row.dataset.fileId === targetId);
+  target?.focus({ preventScroll: true });
+}
+
+function renderVisibleResultRows(): void {
   const focusedRow = document.activeElement instanceof HTMLElement
     ? document.activeElement.closest<HTMLButtonElement>(".result-row")
     : null;
   const focusedFileId = focusedRow?.dataset.fileId ?? null;
+  const { start, end, rowHeight } = visibleResultRange();
+  const canvas = document.createElement("div");
+  canvas.className = "results-virtual-canvas";
+  canvas.style.height = `${state.results.length * rowHeight}px`;
 
-  state.results = sortResults(state.results, state.sort);
-  const visibleCount = Math.min(state.results.length, VISIBLE_RESULT_LIMIT);
-  const visibleSuffix = state.results.length > VISIBLE_RESULT_LIMIT ? ` · ${visibleCount} sichtbar` : "";
-  ui.resultCount.textContent = `(${state.results.length} ${state.results.length === 1 ? "Datei" : "Dateien"}${visibleSuffix})`;
-  ui.results.replaceChildren();
-
-  for (const file of state.results.slice(0, VISIBLE_RESULT_LIMIT)) {
+  for (let index = start; index < end; index += 1) {
+    const file = state.results[index];
+    if (!file) continue;
     const row = document.createElement("button");
     row.type = "button";
     row.className = "result-row";
     row.dataset.fileId = file.id;
+    row.style.transform = `translateY(${index * rowHeight}px)`;
     row.setAttribute("aria-pressed", String(state.selectedIds.has(file.id)));
+    row.setAttribute("aria-label", `${file.displayName}, Treffer ${index + 1} von ${state.results.length}`);
 
     const checkbox = document.createElement("span");
     checkbox.className = "row-check";
@@ -394,18 +469,40 @@ function renderResults(): void {
       state.previewId = file.id;
       render();
     });
+    row.addEventListener("keydown", (event) => {
+      const targetIndex = event.key === "ArrowDown"
+        ? index + 1
+        : event.key === "ArrowUp"
+          ? index - 1
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? state.results.length - 1
+              : null;
+      if (targetIndex === null) return;
+      event.preventDefault();
+      state.previewId = state.results[targetIndex]?.id ?? state.previewId;
+      focusResultAt(targetIndex);
+    });
 
-    ui.results.append(row);
+    canvas.append(row);
   }
 
-  ui.results.scrollTop = previousScrollTop;
+  ui.results.replaceChildren(canvas);
   if (focusedFileId) {
     const replacementRow = [...ui.results.querySelectorAll<HTMLButtonElement>(".result-row")]
       .find((row) => row.dataset.fileId === focusedFileId);
     replacementRow?.focus({ preventScroll: true });
   }
+}
+
+function renderResults(): void {
+  const limitSuffix = state.limitReached ? " · begrenzt" : "";
+  ui.resultCount.textContent = `(${state.results.length} ${state.results.length === 1 ? "Datei" : "Dateien"}${limitSuffix})`;
+  renderVisibleResultRows();
 
   ui.results.setAttribute("aria-busy", String(state.searching));
+  ui.resultLimitNotice.hidden = !state.limitReached;
   ui.empty.hidden = state.results.length > 0 || state.searching;
   const selected = selectedFiles();
   const selectionText = selected.length === 0
@@ -420,6 +517,7 @@ function renderResults(): void {
   ui.open.title = selected.length > 10 ? `${selected.length} Dateien ausgewählt; geöffnet werden höchstens 10.` : "";
   ui.reveal.disabled = selected.length !== 1 || !state.platform.canRevealFile;
   ui.export.disabled = state.results.length === 0;
+  ui.export.title = state.limitReached ? "Die gespeicherte Liste ist unvollständig, weil die Treffergrenze erreicht wurde." : "";
   renderPreview();
 }
 
@@ -429,6 +527,15 @@ function scheduleRenderResults(): void {
   requestAnimationFrame(() => {
     resultRenderScheduled = false;
     renderResults();
+  });
+}
+
+function scheduleVirtualRender(): void {
+  if (virtualRenderScheduled) return;
+  virtualRenderScheduled = true;
+  requestAnimationFrame(() => {
+    virtualRenderScheduled = false;
+    renderVisibleResultRows();
   });
 }
 
@@ -495,6 +602,8 @@ async function runSearch(): Promise<void> {
   state.previewId = null;
   state.scannedCount = 0;
   state.skippedCount = 0;
+  state.limitReached = false;
+  ui.results.scrollTop = 0;
   state.searching = true;
   render();
   setStatus("Suche läuft", "Dateinamen werden geprüft …", "working");
@@ -508,7 +617,7 @@ async function runSearch(): Promise<void> {
       rootPathKey: state.sourcePathKey,
       query,
       batchSize: 250,
-      maxResults: 20_000,
+      maxResults: SEARCH_RESULT_LIMIT,
     });
   } catch (error) {
     state.searching = false;
@@ -538,7 +647,7 @@ async function initialize(): Promise<void> {
   await listenSearchEvents({
     onBatch(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
-      state.results.push(...payload.items);
+      state.results = mergeSortedResults(state.results, payload.items, state.sort);
       state.scannedCount = payload.scannedCount;
       scheduleRenderResults();
     },
@@ -557,11 +666,22 @@ async function initialize(): Promise<void> {
       state.searching = false;
       state.activeSessionId = null;
       state.skippedCount = payload.skippedCount;
+      state.limitReached = payload.limitReached;
       const skipped = payload.skippedCount > 0 ? ` · ${payload.skippedCount} übersprungen` : "";
-      setStatus(
-        `${payload.resultCount} ${payload.resultCount === 1 ? "Datei" : "Dateien"} gefunden`,
-        `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${formatDuration(payload.durationMs)}${skipped}`,
-      );
+      if (payload.limitReached) {
+        ui.resultLimitNotice.textContent =
+          `Treffergrenze erreicht: ${SEARCH_RESULT_LIMIT.toLocaleString("de-DE")} Dateien werden angezeigt. Weitere passende Dateien können vorhanden sein; Anzeige und Export sind unvollständig.`;
+        setStatus(
+          "Treffergrenze erreicht",
+          `${payload.resultCount.toLocaleString("de-DE")} Treffer · Suche bewusst begrenzt · ${formatDuration(payload.durationMs)}${skipped}`,
+          "warning",
+        );
+      } else {
+        setStatus(
+          `${payload.resultCount} ${payload.resultCount === 1 ? "Datei" : "Dateien"} gefunden`,
+          `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${formatDuration(payload.durationMs)}${skipped}`,
+        );
+      }
       render();
     },
     onCancelled(payload) {
@@ -597,8 +717,11 @@ async function initialize(): Promise<void> {
   });
   ui.sort.addEventListener("change", () => {
     state.sort = ui.sort.value as SortMode;
+    state.results = sortResults(state.results, state.sort);
+    ui.results.scrollTop = 0;
     renderResults();
   });
+  ui.results.addEventListener("scroll", scheduleVirtualRender, { passive: true });
   ui.theme.addEventListener("change", () => {
     if (!isTheme(ui.theme.value)) return;
     state.theme = ui.theme.value as Theme;
@@ -642,7 +765,17 @@ async function initialize(): Promise<void> {
       setStatus("Liste konnte nicht gespeichert werden", safeMessage(error), "error");
       return false;
     });
-    if (saved) setStatus("Liste gespeichert", `${state.results.length} Treffer exportiert.`);
+    if (saved) {
+      if (state.limitReached) {
+        setStatus(
+          "Unvollständige Liste gespeichert",
+          `${state.results.length} Treffer exportiert; die Suche hatte die Treffergrenze erreicht.`,
+          "warning",
+        );
+      } else {
+        setStatus("Liste gespeichert", `${state.results.length} Treffer exportiert.`);
+      }
+    }
   });
 
   byId<HTMLButtonElement>("window-minimize").addEventListener("click", () => void minimizeWindow());
