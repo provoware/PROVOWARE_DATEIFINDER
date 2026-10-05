@@ -42,7 +42,7 @@ test("Rust search hard limits remain explicit", () => {
   assert.match(rust, /MAX_QUERY_TOKENS:\s*usize\s*=\s*64/u);
   assert.match(rust, /MAX_ACTIVE_SEARCHES:\s*usize\s*=\s*4/u);
   assert.match(rust, /validate_query\(&request\.query\)\?/u);
-  assert.match(rust, /register_search\(&mut sessions, id\.clone\(\), cancelled\.clone\(\)\)\?/u);
+  assert.match(rust, /register_search_session\(&mut sessions, id\.clone\(\), cancelled\.clone\(\)\)\?/u);
 });
 
 test("file actions use lossless path keys instead of display paths", () => {
