@@ -708,14 +708,19 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_child, classify, matches_name, normalize_query, register_search_session,
-        should_emit_progress, validate_export_lines, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
+        canonical_child, classify, decode_path, encode_path, matches_name, normalize_query,
+        register_search_session, scan_directory, should_emit_progress, validate_export_lines,
+        validate_query, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
+        MAX_QUERY_TOKENS,
     };
     use std::{
         collections::HashMap,
         fs,
         path::PathBuf,
-        sync::{atomic::AtomicBool, Arc},
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
         time::SystemTime,
     };
 
@@ -742,31 +747,6 @@ mod tests {
         assert!(validate_query(&"x".repeat(MAX_QUERY_BYTES + 1)).is_err());
         assert!(validate_query(&vec!["x"; MAX_QUERY_TOKENS + 1].join(" ")).is_err());
         assert_eq!(validate_query("Urlaub 2025").expect("valid query").len(), 2);
-    }
-
-    #[test]
-    fn search_registry_rejects_duplicates_and_excess_sessions() {
-        let mut sessions = HashMap::new();
-        for index in 0..MAX_ACTIVE_SEARCHES {
-            register_search(
-                &mut sessions,
-                format!("session-{index}"),
-                Arc::new(AtomicBool::new(false)),
-            )
-            .expect("session within limit");
-        }
-        assert!(register_search(
-            &mut sessions,
-            "session-0".into(),
-            Arc::new(AtomicBool::new(false))
-        )
-        .is_err());
-        assert!(register_search(
-            &mut sessions,
-            "session-over-limit".into(),
-            Arc::new(AtomicBool::new(false))
-        )
-        .is_err());
     }
 
     #[test]
