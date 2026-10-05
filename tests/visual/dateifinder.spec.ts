@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
-const APPROVED_768X512_SHA256 = "56a820cb6901e9c96e2398d91d10e8a0a14cf6db11ff926b92a0cb4124ecfc0d";
+const APPROVED_768X512_SHA256 = "1081263ca2a48f2f4454a150c9d592b8df33a9a819ce4a93101cbad78d4f9356";
 
 test("768x512 Golden Reference", async ({ page }, testInfo) => {
   expect(page.viewportSize()).toEqual({ width: 768, height: 512 });
