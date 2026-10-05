@@ -45,17 +45,19 @@
             <section class="panel search-panel" aria-labelledby="search-heading">
               <h2 id="search-heading" class="sr-only">Suche</h2>
               <form id="search-form" class="search-row">
-                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" placeholder="z. B. rechnung 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" /></label>
+                <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" placeholder="z. B. rechnung 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" aria-describedby="query-help" /></label>
                 <button id="search-button" class="primary-button" type="submit">Suchen</button>
               </form>
+              <p id="query-help" class="sr-only">Mehrere Wörter werden gemeinsam gesucht. Jedes eingegebene Wort muss im Dateinamen vorkommen.</p>
               <div class="chips" aria-label="Suchbeispiele">
                 <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button id="search-help-button" type="button" class="options-chip" aria-haspopup="dialog">? Hilfe</button>
               </div>
             </section>
 
             <section class="panel results-panel" aria-labelledby="results-title">
-              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count" aria-live="polite" aria-atomic="true">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
-              <div id="results-list" class="results-list" aria-label="Gefundene Dateien"></div>
+              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
+              <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary" aria-busy="false"></div>
+              <p id="selection-summary" class="sr-only" aria-live="polite" aria-atomic="true">Keine Datei ausgewählt.</p>
               <div id="empty-state" class="empty-state"><strong>Noch kein Suchort gewählt.</strong><span>Wähle links unter „Orte“ zuerst einen Ordner.</span></div>
             </section>
           </div>
@@ -68,7 +70,8 @@
         </section>
 
         <footer class="actionbar">
-          <div class="status-block" role="status" aria-live="polite" aria-atomic="true" data-tone="ready"><span id="status-icon" class="status-icon" aria-hidden="true">✓</span><span class="status-content"><strong id="status-title">Bereit</strong><small id="status-detail">Wähle einen Suchort.</small><span id="status-progress" class="status-progress" role="progressbar" aria-label="Suchfortschritt" aria-valuetext="Bereit" hidden><span></span></span></span></div>
+          <div class="status-block" data-tone="ready"><span id="status-icon" class="status-icon" aria-hidden="true">✓</span><span class="status-content"><strong id="status-title">Bereit</strong><small id="status-detail">Wähle einen Suchort.</small><span id="status-progress" class="status-progress" role="progressbar" aria-label="Suchfortschritt" aria-valuetext="Bereit" hidden><span></span></span></span></div>
+          <p id="status-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true">Bereit. Wähle einen Suchort.</p>
           <div class="footer-actions"><button id="open-selected" type="button" disabled>📂 Ausgewählte öffnen</button><button id="reveal-selected" type="button" disabled>▣ In Ordner zeigen</button><button id="export-results" type="button" disabled>💾 Liste speichern …</button></div>
         </footer>
       </main>
