@@ -256,6 +256,8 @@ const ui = {
   form: byId<HTMLFormElement>("search-form"),
   query: byId<HTMLInputElement>("query-input"),
   sourceLabel: byId<HTMLElement>("source-label"),
+  sourceNav: byId<HTMLButtonElement>("choose-source-nav"),
+  mobileSource: byId<HTMLButtonElement>("mobile-source-button"),
   results: byId<HTMLElement>("results-list"),
   resultCount: byId<HTMLElement>("result-count"),
   empty: byId<HTMLElement>("empty-state"),
@@ -263,6 +265,8 @@ const ui = {
   statusDetail: byId<HTMLElement>("status-detail"),
   statusIcon: byId<HTMLElement>("status-icon"),
   statusProgress: byId<HTMLElement>("status-progress"),
+  statusAnnouncer: byId<HTMLElement>("status-announcer"),
+  selectionSummary: byId<HTMLElement>("selection-summary"),
   cancel: byId<HTMLButtonElement>("cancel-search"),
   open: byId<HTMLButtonElement>("open-selected"),
   reveal: byId<HTMLButtonElement>("reveal-selected"),
@@ -278,7 +282,12 @@ const ui = {
   previewKind: byId<HTMLElement>("preview-kind"),
 };
 
-function setStatus(title: string, detail: string, tone: "ready" | "working" | "error" = "ready"): void {
+function setStatus(
+  title: string,
+  detail: string,
+  tone: "ready" | "working" | "error" = "ready",
+  announce = true,
+): void {
   ui.statusTitle.textContent = title;
   ui.statusDetail.textContent = detail;
   ui.statusIcon.textContent = tone === "error" ? "!" : tone === "working" ? "…" : "✓";
@@ -286,6 +295,11 @@ function setStatus(title: string, detail: string, tone: "ready" | "working" | "e
   ui.statusIcon.closest(".status-block")?.setAttribute("data-tone", tone);
   ui.statusProgress.hidden = tone !== "working";
   ui.statusProgress.setAttribute("aria-valuetext", tone === "working" ? detail : title);
+
+  if (announce) {
+    const message = `${title}. ${detail}`;
+    if (ui.statusAnnouncer.textContent !== message) ui.statusAnnouncer.textContent = message;
+  }
 }
 
 function formatDuration(durationMs: number): string {
@@ -323,6 +337,12 @@ function renderPreview(): void {
 }
 
 function renderResults(): void {
+  const previousScrollTop = ui.results.scrollTop;
+  const focusedRow = document.activeElement instanceof HTMLElement
+    ? document.activeElement.closest<HTMLButtonElement>(".result-row")
+    : null;
+  const focusedFileId = focusedRow?.dataset.fileId ?? null;
+
   state.results = sortResults(state.results, state.sort);
   const visibleCount = Math.min(state.results.length, VISIBLE_RESULT_LIMIT);
   const visibleSuffix = state.results.length > VISIBLE_RESULT_LIMIT ? ` · ${visibleCount} sichtbar` : "";
@@ -339,9 +359,11 @@ function renderResults(): void {
     const checkbox = document.createElement("span");
     checkbox.className = "row-check";
     checkbox.textContent = state.selectedIds.has(file.id) ? "✓" : "";
+    checkbox.setAttribute("aria-hidden", "true");
 
     const icon = document.createElement("span");
     icon.className = `file-icon file-${file.kind}`;
+    icon.setAttribute("aria-hidden", "true");
     icon.textContent = file.kind === "image" ? "▧" : file.kind === "audio" ? "♫" : file.kind === "document" ? "PDF" : "txt";
 
     const name = document.createElement("span");
@@ -376,9 +398,26 @@ function renderResults(): void {
     ui.results.append(row);
   }
 
+  ui.results.scrollTop = previousScrollTop;
+  if (focusedFileId) {
+    const replacementRow = [...ui.results.querySelectorAll<HTMLButtonElement>(".result-row")]
+      .find((row) => row.dataset.fileId === focusedFileId);
+    replacementRow?.focus({ preventScroll: true });
+  }
+
+  ui.results.setAttribute("aria-busy", String(state.searching));
   ui.empty.hidden = state.results.length > 0 || state.searching;
   const selected = selectedFiles();
+  const selectionText = selected.length === 0
+    ? "Keine Datei ausgewählt."
+    : selected.length === 1
+      ? "1 Datei ausgewählt."
+      : `${selected.length} Dateien ausgewählt.${selected.length > 10 ? " Beim Öffnen werden die ersten 10 verwendet." : ""}`;
+  if (ui.selectionSummary.textContent !== selectionText) ui.selectionSummary.textContent = selectionText;
+
   ui.open.disabled = selected.length === 0 || !state.platform.canOpenFile;
+  ui.open.textContent = selected.length > 10 ? "📂 Erste 10 öffnen" : selected.length === 1 ? "📂 Datei öffnen" : "📂 Ausgewählte öffnen";
+  ui.open.title = selected.length > 10 ? `${selected.length} Dateien ausgewählt; geöffnet werden höchstens 10.` : "";
   ui.reveal.disabled = selected.length !== 1 || !state.platform.canRevealFile;
   ui.export.disabled = state.results.length === 0;
   renderPreview();
@@ -401,6 +440,11 @@ function render(): void {
   renderResults();
 }
 
+function focusSourcePicker(): void {
+  const target = [ui.sourceNav, ui.mobileSource].find((button) => button.offsetParent !== null && !button.disabled);
+  target?.focus();
+}
+
 async function chooseSource(): Promise<void> {
   try {
     if (state.platform.canPickFolder) {
@@ -411,6 +455,7 @@ async function chooseSource(): Promise<void> {
       state.sourceLabel = root.path.split(/[\\/]/).filter(Boolean).at(-1) ?? root.path;
       setStatus("Suchort gewählt", state.sourceLabel);
       render();
+      ui.query.focus();
       return;
     }
 
@@ -437,6 +482,7 @@ async function runSearch(): Promise<void> {
 
   if (!state.sourcePathKey) {
     setStatus("Suchort fehlt", "Bitte zuerst unter „Orte“ einen Ordner auswählen.", "error");
+    focusSourcePicker();
     return;
   }
 
@@ -503,6 +549,7 @@ async function initialize(): Promise<void> {
         "Suche läuft",
         `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${state.results.length.toLocaleString("de-DE")} Treffer`,
         "working",
+        false,
       );
     },
     onFinished(payload) {
@@ -531,8 +578,8 @@ async function initialize(): Promise<void> {
     setStatus("Suchereignisse nicht verfügbar", "Die Oberfläche bleibt bedienbar; Suchen ist derzeit nicht möglich.", "error");
   });
 
-  byId<HTMLButtonElement>("choose-source-nav").addEventListener("click", chooseSource);
-  byId<HTMLButtonElement>("mobile-source-button").addEventListener("click", chooseSource);
+  ui.sourceNav.addEventListener("click", chooseSource);
+  ui.mobileSource.addEventListener("click", chooseSource);
   byId<HTMLButtonElement>("search-help-button").addEventListener("click", () => ui.searchHelp.showModal());
   ui.form.addEventListener("submit", (event) => {
     event.preventDefault();
