@@ -29,6 +29,8 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Set up exact Rust toolchain
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
@@ -38,6 +40,17 @@ jobs:
 
       - name: Install locked frontend dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Restore Rust build cache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install Linux Tauri dependencies
         run: |
@@ -78,11 +91,8 @@ jobs:
       - name: Install exact Chromium runtime
         run: npx playwright install --with-deps chromium
 
-      - name: UI-E2E - static application acceptance matrix
-        run: npx playwright test --config=playwright.hardening.config.ts --grep "reference shell|theme|keyboard"
-
-      - name: 200%-LAYOUT - critical controls remain reachable
-        run: npx playwright test --config=playwright.hardening.config.ts --grep "200-percent"
+      - name: UI-E2E + 200%-LAYOUT - complete hardening suite
+        run: npm run test:ui
 
       - name: GOLDEN - approved 768x512 regression stays stable
         run: npm run test:visual
@@ -102,8 +112,8 @@ jobs:
             echo "- TIEF: production build + rustfmt + clippy + Rust suite"
             echo "- STRESS: 100000 matcher cases"
             echo "- SECURITY: root escape + symlink escape + export bounds"
-            echo "- UI-E2E: static application acceptance matrix"
-            echo "- 200%-LAYOUT: critical-control reachability"
+            echo "- UI-E2E: complete hardening suite, including large virtual lists and result-limit warnings"
+            echo "- 200%-LAYOUT: critical-control reachability is included in the complete UI suite"
             echo "- GOLDEN: approved 768x512 pixel regression"
           } | tee hardening-evidence.md
           cat hardening-evidence.md >> "$GITHUB_STEP_SUMMARY"

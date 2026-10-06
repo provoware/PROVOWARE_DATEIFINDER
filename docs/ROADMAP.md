@@ -22,11 +22,17 @@
 
 ## P2 — Desktop Hardening
 
-- [ ] echte Listenvirtualisierung statt Render-Cap
+- [x] echte Listenvirtualisierung statt Render-Cap
 - [ ] Preview-Thumbnail-Pipeline
 - [ ] Fehlerzustände für gelöschte/gesperrte Dateien
-- [ ] Stressfixture 100000+ Einträge
-- [ ] Tastatur- und Accessibility-Gate
+- [x] Stressfixture 100000+ Einträge
+- [x] Tastatur- und Accessibility-Gate
+
+- [x] 20.000-Treffer-Grenze sichtbar bis UI und Export übertragen
+- [x] eingereihte Scan-Ordner vor Zugriff erneut gegen den freigegebenen Root prüfen
+- [x] vollständige UI-Hardening-Suite inklusive 5.000-Treffer- und 200-%-Tests
+- [x] npm- und Cargo-Zwischenspeicher in CI
+- [x] wöchentliche Abhängigkeitsüberwachung für npm, Cargo und GitHub-Actions
 
 ## P3 — Mobile V1
 

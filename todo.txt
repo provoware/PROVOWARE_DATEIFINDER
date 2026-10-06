@@ -1,7 +1,27 @@
-[P1] Scanner-Sicherheitsgrenze – nur der Start-Root wird kanonisiert, während eingereihte Verzeichnisse später ohne erneute Root-Prüfung geöffnet werden – ein lokaler Verzeichnis-/Symlinktausch kann während des Scans Namen außerhalb des Roots sichtbar machen – Traversierung mit handlebasierter bzw. erneut validierter Verzeichnisgrenze härten und Race-Test ergänzen
-[P1] Ergebnisdarstellung – jedes Batch sortiert die Gesamtliste und baut bis zu 2000 DOM-Zeilen neu auf – große Suchen erzeugen unnötige CPU-, GC- und Fokuslast – echte Virtualisierung oder inkrementelle, stabile Listendarstellung einführen
-[P1] Ergebnislimit – der Scan stoppt bei 20000 Treffern ohne sichtbaren Trunkierungshinweis – Nutzer können eine vollständige Trefferliste annehmen – Limitstatus im Abschlussvertrag übertragen und UI/Export eindeutig als unvollständig kennzeichnen
-[P1] Barrierefreiheit – dynamischer Suchstatus ist keine Live-Region und der reine Symbol-Abbruchknopf besitzt nur einen `title` – Screenreader melden Fortschritt/Fehler und die Aktion nicht zuverlässig – passende Live-Region und explizites zugängliches Label ergänzen sowie mit Tastatur-/ARIA-Test absichern
-[P2] Auswahlaktionen – „Ausgewählte öffnen“ verarbeitet still nur die ersten zehn Treffer; unsichtbar gewordene Auswahlen außerhalb des Render-Caps lassen sich schwer zurücknehmen – Aktionen widersprechen sichtbarer Auswahl – Limit kommunizieren und Auswahl unabhängig vom sichtbaren Fenster verwaltbar machen
-[P2] Release-Metadaten – README meldet v0.1.1, während npm-, Cargo- und Tauri-Manifeste v0.1.0 führen und keine Lizenz festgelegt ist – Builds und öffentliche Releases sind uneindeutig – Version aus einer Releasequelle synchronisieren und Lizenz vor Veröffentlichung entscheiden
-[P3] CI-Wartung – Quality- und Hardening-Workflows installieren und prüfen große Teile doppelt, während Dependency-Audits fehlen – PR-Laufzeit steigt ohne gleichwertigen Zusatznutzen – Gates deduplizieren und einen gelockten Rust-/npm-Sicherheitsaudit ergänzen
+# PROVOWARE DateiFinder – offene Punkte
+
+[P2] Preview-Thumbnail-Pipeline – Vorschau zeigt derzeit Metadaten, aber keine echten Bild-/Dateivorschauen – separat und erst nach neuem Freigabeauftrag bearbeiten.
+
+[P2] Fehlerzustände für gelöschte/gesperrte Dateien – Dateiaktionen behandeln nicht jeden nachträglichen Dateizustand gleich detailliert – eigene Fehlerfall-Abnahme ergänzen.
+
+[P2] Release-Metadaten – Produktversion 0.1.1 ist in npm, Cargo und Tauri synchronisiert. Die Lizenzentscheidung bleibt ausdrücklich offen und ist nicht Teil dieses Wartungsschnitts.
+
+[P3] Mobile – echte mobile Dateiquellen, Android-/iOS-Abnahme und plattformübergreifende Vertragstests bleiben separate Folgearbeiten.
+
+# Abgeschlossen / eingefroren – 2026-10-06
+
+[x] Scanner-Sicherheitsgrenze – jeder eingereihte Ordner wird unmittelbar vor dem Öffnen erneut kanonisiert und gegen den freigegebenen Startordner geprüft; Symlink-Tausch-Test ergänzt.
+
+[x] Ergebnisdarstellung – echte Listenvirtualisierung und inkrementelles Zusammenführen großer Trefferlisten umgesetzt.
+
+[x] Ergebnislimit – 20.000-Treffer-Grenze wird durch Rust bis zur Oberfläche übertragen; Anzeige und Export werden bei erreichter Grenze eindeutig als potenziell unvollständig markiert.
+
+[x] Nutzerfreundlichkeit / Barrierefreiheit – Fokus, Statusansagen, Tastaturbedienung, 200-%-Layout und Golden-Referenz geprüft; Bereich FROZEN.
+
+[x] Auswahlaktionen – Öffnungsgrenze von zehn Dateien wird sichtbar kommuniziert; Auswahl bleibt unabhängig vom virtuellen Sichtfenster erhalten.
+
+[x] Prüfautomatik – komplette UI-Hardening-Suite wird ausgeführt; 5.000-Treffer- und Treffergrenzen-Tests sind Teil des automatischen Laufs.
+
+[x] CI-Laufzeit – npm- und Rust/Cargo-Zwischenspeicher für Quality und Hardening ergänzt.
+
+[x] Abhängigkeitsüberwachung – Dependabot prüft wöchentlich npm, Cargo und GitHub-Actions.
