@@ -744,10 +744,10 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_child, canonical_scan_directory, classify, decode_path, encode_path, matches_name,
-        normalize_query, register_search_session, scan_directory, should_emit_progress, validate_export_lines,
-        validate_query, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
-        MAX_QUERY_TOKENS,
+        canonical_child, canonical_scan_directory, classify, decode_path, encode_path,
+        matches_name, normalize_query, register_search_session, scan_directory,
+        should_emit_progress, validate_export_lines, validate_query, ScanEvent,
+        MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
     };
     use std::{
         collections::HashMap,
