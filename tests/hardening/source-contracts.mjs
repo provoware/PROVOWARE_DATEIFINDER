@@ -2,11 +2,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const [frontend, rust, css, tauriConfig] = await Promise.all([
+const [frontend, rust, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
   readFile("src/main.ts", "utf8"),
   readFile("src-tauri/src/lib.rs", "utf8"),
   readFile("src/styles.css", "utf8"),
   readFile("src-tauri/tauri.conf.json", "utf8"),
+  readFile(".github/workflows/quality.yml", "utf8"),
+  readFile(".github/workflows/autonomous-hardening.yml", "utf8"),
+  readFile(".github/dependabot.yml", "utf8"),
 ]);
 
 test("frontend capability fallback is fail-closed", () => {
@@ -87,7 +90,27 @@ test("export is bounded by line and aggregate bytes", () => {
 test("path boundary and symlink protections remain present", () => {
   assert.match(rust, /if !child\.starts_with\(&root\)/u);
   assert.match(rust, /if file_type\.is_symlink\(\)/u);
-  assert.match(rust, /VecDeque::from\(\[root\]\)/u);
+  assert.match(rust, /fn canonical_scan_directory\(/u);
+  assert.match(rust, /canonical_scan_directory\(&canonical_root, &directory\)/u);
+  assert.match(rust, /VecDeque::from\(\[canonical_root\.clone\(\)\]\)/u);
+  assert.match(rust, /queued_directory_is_revalidated_after_symlink_swap/u);
+});
+
+
+test("hardening executes the complete UI suite and dependency caches stay enabled", () => {
+  assert.match(hardeningWorkflow, /run:\s*npm run test:ui/u);
+  assert.doesNotMatch(hardeningWorkflow, /--grep "reference shell\|theme\|keyboard"/u);
+  assert.match(qualityWorkflow, /cache:\s*npm/u);
+  assert.match(hardeningWorkflow, /cache:\s*npm/u);
+  assert.match(qualityWorkflow, /actions\/cache@0057852bfaa89a56745cba8c7296529d2fc39830/u);
+  assert.match(hardeningWorkflow, /actions\/cache@0057852bfaa89a56745cba8c7296529d2fc39830/u);
+});
+
+test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
+  assert.match(dependabot, /package-ecosystem:\s*npm/u);
+  assert.match(dependabot, /package-ecosystem:\s*cargo/u);
+  assert.match(dependabot, /package-ecosystem:\s*github-actions/u);
+  assert.match(dependabot, /interval:\s*weekly/u);
 });
 
 test("accessibility contracts remain enabled", () => {
