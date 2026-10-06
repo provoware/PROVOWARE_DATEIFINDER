@@ -102,8 +102,8 @@ test("hardening executes the complete UI suite and dependency caches stay enable
   assert.doesNotMatch(hardeningWorkflow, /--grep "reference shell\|theme\|keyboard"/u);
   assert.match(qualityWorkflow, /cache:\s*npm/u);
   assert.match(hardeningWorkflow, /cache:\s*npm/u);
-  assert.match(qualityWorkflow, /actions\/cache@0057852bfaa89a56745cba8c7296529d2fc39830/u);
-  assert.match(hardeningWorkflow, /actions\/cache@0057852bfaa89a56745cba8c7296529d2fc39830/u);
+  assert.match(qualityWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
+  assert.match(hardeningWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
 });
 
 test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
