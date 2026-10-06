@@ -128,7 +128,7 @@ test("large result sets render only the visible virtual window", async ({ page }
     node.scrollTop = node.scrollHeight;
   });
   await expect.poll(async () => page.locator(".result-row").count()).toBeLessThan(40);
-  await expect(page.locator(".result-row").last()).toContainText("rechnung-2025-4999.pdf");
+  await expect(page.locator(".result-row").last()).toHaveAttribute("aria-label", /Treffer 5000 von 5000$/);
 });
 
 test("result limit is clearly reported as incomplete", async ({ page }) => {
@@ -193,7 +193,15 @@ test("brand stays inside the sidebar without colliding with the workspace", asyn
   expect(workspaceBox).not.toBeNull();
   expect(brandBox!.x + brandBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width);
   expect(sidebarBox!.x + sidebarBox!.width).toBeLessThanOrEqual(workspaceBox!.x);
-  expect(await page.locator(".brand strong").evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+
+  const brandTitle = page.locator(".brand strong");
+  const titleBox = await brandTitle.boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width);
+  expect(await brandTitle.evaluate((node) => {
+    const style = getComputedStyle(node);
+    return { overflow: style.overflow, textOverflow: style.textOverflow };
+  })).toEqual({ overflow: "hidden", textOverflow: "ellipsis" });
 });
 
 for (const theme of themes) {
