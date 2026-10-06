@@ -255,6 +255,16 @@ fn canonical_child(root: &Path, child: &Path) -> Result<PathBuf, String> {
     Ok(child)
 }
 
+fn canonical_scan_directory(root: &Path, directory: &Path) -> Result<PathBuf, String> {
+    let directory = directory
+        .canonicalize()
+        .map_err(|error| format!("Suchordner ist nicht verfügbar: {error}"))?;
+    if !directory.starts_with(root) || !directory.is_dir() {
+        return Err("Der Suchordner liegt außerhalb des freigegebenen Suchorts.".into());
+    }
+    Ok(directory)
+}
+
 fn should_emit_progress(scanned_count: usize, last_progress: usize) -> bool {
     scanned_count.saturating_sub(last_progress) >= PROGRESS_INTERVAL
 }
@@ -325,7 +335,19 @@ fn scan_directory<F>(
 where
     F: FnMut(ScanEvent),
 {
-    let mut queue = VecDeque::from([root]);
+    let canonical_root = match root.canonicalize() {
+        Ok(root) if root.is_dir() => root,
+        _ => {
+            return ScanOutcome {
+                scanned_count: 0,
+                result_count: 0,
+                skipped_count: 1,
+                cancelled: cancelled.load(Ordering::Relaxed),
+                limit_reached: false,
+            };
+        }
+    };
+    let mut queue = VecDeque::from([canonical_root.clone()]);
     let mut batch = Vec::with_capacity(batch_size);
     let mut scanned_count = 0usize;
     let mut result_count = 0usize;
@@ -337,6 +359,14 @@ where
         if cancelled.load(Ordering::Relaxed) {
             break;
         }
+
+        let directory = match canonical_scan_directory(&canonical_root, &directory) {
+            Ok(directory) => directory,
+            Err(_) => {
+                skipped_count += 1;
+                continue;
+            }
+        };
 
         let entries = match fs::read_dir(&directory) {
             Ok(entries) => entries,
@@ -714,8 +744,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        canonical_child, classify, decode_path, encode_path, matches_name, normalize_query,
-        register_search_session, scan_directory, should_emit_progress, validate_export_lines,
+        canonical_child, canonical_scan_directory, classify, decode_path, encode_path, matches_name,
+        normalize_query, register_search_session, scan_directory, should_emit_progress, validate_export_lines,
         validate_query, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
         MAX_QUERY_TOKENS,
     };
@@ -865,6 +895,32 @@ mod tests {
         assert_eq!(outcome.result_count, 1);
         assert_eq!(outcome.skipped_count, 1);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn queued_directory_is_revalidated_after_symlink_swap() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_test_dir("scan-race-root");
+        let outside = temp_test_dir("scan-race-outside");
+        let queued = root.join("queued");
+        fs::create_dir(&queued).expect("create queued directory");
+        fs::write(outside.join("secret-match.txt"), b"outside").expect("write outside file");
+
+        let canonical_root = root.canonicalize().expect("canonical root");
+        let previously_safe = canonical_scan_directory(&canonical_root, &queued)
+            .expect("queued directory initially inside root");
+        assert!(previously_safe.starts_with(&canonical_root));
+
+        fs::remove_dir(&queued).expect("remove queued directory");
+        symlink(&outside, &queued).expect("replace queued directory with outside symlink");
+
+        assert!(canonical_scan_directory(&canonical_root, &queued).is_err());
+
+        let _ = fs::remove_file(&queued);
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside);
     }
 
     #[test]
