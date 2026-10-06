@@ -21,7 +21,11 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ responsive Mobile-Basis
 - ✅ Foundation-CI und Hardening-Gates grün
 - 🟡 Mobile-Dateiquellen sind vorbereitet; Android SAF/iOS Document Provider folgen separat
-- 🟡 P1 Visual Master beginnt mit der Vermessung der Cyan-Referenz gegen 768 × 512 px
+- ✅ Nutzerfreundlichkeit / Barrierefreiheit nach PR #17/#18 geprüft und eingefroren
+- ✅ große Trefferlisten virtualisiert; 20.000-Treffer-Grenze wird sichtbar gemeldet
+- ✅ Scanner prüft eingereihte Ordner vor Zugriff erneut gegen den freigegebenen Suchort
+- ✅ vollständige Hardening-Suite inklusive 5.000-Treffer-, 200-%- und Golden-Prüfung
+- ✅ wöchentliche Abhängigkeitsüberwachung für npm, Cargo und GitHub-Actions
 
 ## Schnellstart
 
