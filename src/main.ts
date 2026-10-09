@@ -161,7 +161,7 @@ function mergeSortedResults(existing: FileEntry[], incoming: FileEntry[], mode: 
   return merged;
 }
 
-function isTheme(value: string): value is Theme {
+function isTheme(value: unknown): value is Theme {
   return value === "cyan" || value === "purple" || value === "green" || value === "orange";
 }
 
@@ -248,9 +248,7 @@ async function exportResults(lines: string[]): Promise<boolean> {
 
 async function loadTheme(): Promise<Theme | null> {
   const value = await settings.get<string>("theme");
-  return value === "cyan" || value === "purple" || value === "green" || value === "orange"
-    ? value
-    : null;
+  return isTheme(value) ? value : null;
 }
 
 async function saveTheme(theme: Theme): Promise<void> {
