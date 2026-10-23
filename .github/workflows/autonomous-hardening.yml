@@ -68,11 +68,13 @@ jobs:
             patchelf
 
       - name: SCHNELL - source contracts and TypeScript
+        id: quick
         run: |
           node --test tests/hardening/source-contracts.mjs
           npm run typecheck
 
       - name: TIEF - build fmt clippy and complete Rust suite
+        id: deep
         run: |
           npm run build
           cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -80,9 +82,11 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml
 
       - name: STRESS - 100000 matcher cases
+        id: stress
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml tests::matcher_stays_stable_under_large_input_volume -- --exact
 
       - name: SECURITY - path escape symlink and export bounds
+        id: security
         run: |
           cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_accepts_real_child_and_rejects_outside_file
           cargo test --locked --manifest-path src-tauri/Cargo.toml canonical_child_rejects_symlink_escape
@@ -92,13 +96,22 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: UI-E2E + 200%-LAYOUT - complete hardening suite
+        id: ui
         run: npm run test:ui
 
       - name: GOLDEN - approved 768x512 regression stays stable
+        id: golden
         run: npm run test:visual
 
-      - name: Post-Merge-Evidence candidate report
+      - name: Evidence report with actual gate outcomes
         if: always()
+        env:
+          QUICK_RESULT: ${{ steps.quick.outcome }}
+          DEEP_RESULT: ${{ steps.deep.outcome }}
+          STRESS_RESULT: ${{ steps.stress.outcome }}
+          SECURITY_RESULT: ${{ steps.security.outcome }}
+          UI_RESULT: ${{ steps.ui.outcome }}
+          GOLDEN_RESULT: ${{ steps.golden.outcome }}
         run: |
           {
             echo "# AUTONOMOUS HARDENING 0.1"
@@ -107,13 +120,14 @@ jobs:
             echo "Run: $GITHUB_RUN_ID"
             echo "Branch/Ref: $GITHUB_REF"
             echo
-            echo "Automated gates executed:"
-            echo "- SCHNELL: source contracts + TypeScript"
-            echo "- TIEF: production build + rustfmt + clippy + Rust suite"
-            echo "- STRESS: 100000 matcher cases"
-            echo "- SECURITY: root escape + symlink escape + export bounds"
-            echo "- UI-E2E: complete hardening suite, including large virtual lists and result-limit warnings"
-            echo "- 200%-LAYOUT: critical-control reachability is included in the complete UI suite"
-            echo "- GOLDEN: approved 768x512 pixel regression"
+            echo "Actual step outcomes (success/failure/skipped/cancelled):"
+            echo "- SCHNELL: $QUICK_RESULT"
+            echo "- TIEF: $DEEP_RESULT"
+            echo "- STRESS: $STRESS_RESULT"
+            echo "- SECURITY: $SECURITY_RESULT"
+            echo "- UI-E2E and 200%-LAYOUT: $UI_RESULT"
+            echo "- GOLDEN 768x512: $GOLDEN_RESULT"
+            echo
+            echo "A skipped or failed gate is NOT release evidence."
           } | tee hardening-evidence.md
           cat hardening-evidence.md >> "$GITHUB_STEP_SUMMARY"
