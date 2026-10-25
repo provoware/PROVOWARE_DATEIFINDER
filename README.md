@@ -131,6 +131,32 @@ Die Trefferliste markiert Bilder dezent cyanblau, Dokumente rosarot,
 Audio violett und sonstige Dateien grünlich. Die Dateinamen bleiben gut
 lesbar; die Farben ergänzen Dateisymbol und Dateityp, statt sie zu ersetzen.
 
+### Markierte Dateien sicher kopieren, verschieben und zippen
+
+Nach der Suche gewünschte Treffer anklicken. Oberhalb der Treffer erscheinen
+**„Kopieren“**, **„Verschieben“** und **„Als ZIP“**. Aktion wählen, optional einen
+neuen Unterordner bzw. ZIP-Namen eintragen und den Zielordner über den
+Linux-Systemdialog auswählen. Währenddessen zeigt DateiFinder die abgeschlossene
+Dateianzahl und bietet **„Abbrechen“**.
+
+Es werden höchstens 100 Dateien mit zusammen maximal 8 GiB je Vorgang
+angenommen. Bestehende Dateien werden **niemals überschrieben**. Wenn zwei
+markierte Dateien denselben Namen tragen, müssen sie getrennt übertragen werden.
+Das Programm legt erst eine temporäre Kopie im Zielverzeichnis an, vergleicht
+den Inhalt byteweise und gibt sie danach frei. Beim Verschieben wird die
+Originaldatei erst nach dem erfolgreichen Zielvergleich gelöscht. Bei Fehlern
+werden unvollständige Zwischendateien entfernt; bereits erfolgreich
+übertragene Dateien bleiben bestehen und werden als Teilabschluss gemeldet.
+Auf einigen USB-Laufwerken ohne Hardlink-Unterstützung wird ein alternativer
+exklusiver Kopierweg verwendet.
+
+Für **„Als ZIP“** muss auf Linux das Paket `zip` installiert sein
+(`sudo apt install zip`). ZIP-Archive werden vor der Freigabe mit `zip -T`
+getestet und nach dem Übertragen erneut verglichen. Die Quelldateien bleiben
+beim ZIP-Erstellen immer erhalten. Bei einem Abbruch während des Verschiebens
+können bereits fertig verschobene Dateien im Ziel liegen; der Status informiert
+über die Anzahl. Eine bestehende Datei wird auch dann nie still überschrieben.
+
 ### Gespeicherte Suchvorlagen und Startassistent
 
 Unter **Einstellungen** kannst du die aktuelle Suchanfrage mit einem Namen speichern. Der DateiFinder merkt sich dazu die Wortverknüpfung und ausgewählte Dateitypen. Bereits vorhandene Vorlagen erscheinen als Schnellzugriff in der Suche. Bis zu 20 Vorlagen sind möglich. Import und Export funktionieren über JSON-Dateien; vorhandene Namen werden beim Import nicht ungefragt ersetzt. **Strg + Umschalt + S** öffnet die Vorlageneinstellungen.

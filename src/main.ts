@@ -72,6 +72,29 @@ interface SearchCancelledPayload {
   sessionId: string;
 }
 
+type FileActionKind = "copy" | "move" | "zip";
+
+interface FileActionRequest {
+  sessionId: string;
+  rootPathKey: string;
+  pathKeys: string[];
+  action: FileActionKind;
+  newFolderName: string | null;
+  archiveName: string | null;
+}
+
+interface FileActionResult {
+  completed: number;
+  destination: string;
+}
+
+interface FileActionProgress {
+  sessionId: string;
+  completed: number;
+  total: number;
+  phase: string;
+}
+
 interface AppState {
   query: string;
   matchMode: MatchMode;
@@ -86,6 +109,7 @@ interface AppState {
   previewId: string | null;
   sort: SortMode;
   searching: boolean;
+  fileActionBusy: boolean;
   activeSessionId: string | null;
   scannedCount: number;
   elapsedMs: number;
@@ -110,6 +134,7 @@ const initialState: AppState = {
   previewId: null,
   sort: "name-asc",
   searching: false,
+  fileActionBusy: false,
   activeSessionId: null,
   scannedCount: 0,
   elapsedMs: 0,
@@ -228,6 +253,9 @@ interface BrowserTestAdapter {
   previewText(rootPathKey: string, pathKey: string): Promise<string>;
   importSearchPresets(): Promise<string | null>;
   exportSearchPresets(contents: string): Promise<boolean>;
+  executeFileAction(request: FileActionRequest): Promise<FileActionResult | null>;
+  cancelFileAction(sessionId: string): Promise<void>;
+  listenFileActionProgress(listener: (payload: FileActionProgress) => void): Promise<UnlistenFn>;
 }
 
 declare global {
@@ -282,6 +310,21 @@ async function startSearch(request: SearchRequest): Promise<void> {
 async function cancelSearch(sessionId: string): Promise<void> {
   if (browserTestAdapter?.cancelSearch) return browserTestAdapter.cancelSearch(sessionId);
   await invoke("cancel_search", { sessionId });
+}
+
+async function executeFileAction(request: FileActionRequest): Promise<FileActionResult | null> {
+  if (browserTestAdapter?.executeFileAction) return browserTestAdapter.executeFileAction(request);
+  return invoke<FileActionResult | null>("execute_file_action", { request });
+}
+
+async function cancelFileAction(sessionId: string): Promise<void> {
+  if (browserTestAdapter?.cancelFileAction) return browserTestAdapter.cancelFileAction(sessionId);
+  await invoke("cancel_file_action", { sessionId });
+}
+
+async function listenFileActionProgress(listener: (payload: FileActionProgress) => void): Promise<UnlistenFn> {
+  if (browserTestAdapter?.listenFileActionProgress) return browserTestAdapter.listenFileActionProgress(listener);
+  return listen<FileActionProgress>("file-action-progress", ({ payload }) => listener(payload));
 }
 
 async function openFile(rootPathKey: string, pathKey: string): Promise<void> {
@@ -356,6 +399,8 @@ let insightsOpen = false;
 let searchPresets: SearchPreset[] = [];
 let currentZoom = 1;
 let lastPreviewRequest = "";
+let selectedAction: FileActionKind = "copy";
+let activeFileActionSession: string | null = null;
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -375,6 +420,25 @@ const ui = {
   results: byId<HTMLElement>("results-list"),
   resultCount: byId<HTMLElement>("result-count"),
   resultLimitNotice: byId<HTMLElement>("result-limit-notice"),
+  fileActionToolbar: byId<HTMLElement>("file-action-toolbar"),
+  fileActionCount: byId<HTMLElement>("file-action-count"),
+  actionCopy: byId<HTMLButtonElement>("action-copy"),
+  actionMove: byId<HTMLButtonElement>("action-move"),
+  actionZip: byId<HTMLButtonElement>("action-zip"),
+  fileActionDialog: byId<HTMLDialogElement>("file-action-dialog"),
+  fileActionTitle: byId<HTMLElement>("file-action-title"),
+  fileActionDescription: byId<HTMLElement>("file-action-description"),
+  fileActionSummary: byId<HTMLElement>("file-action-summary"),
+  fileActionCreateFolder: byId<HTMLInputElement>("file-action-create-folder"),
+  fileActionFolderLabel: byId<HTMLElement>("file-action-folder-label"),
+  fileActionFolderName: byId<HTMLInputElement>("file-action-folder-name"),
+  fileActionArchiveLabel: byId<HTMLElement>("file-action-archive-label"),
+  fileActionArchiveName: byId<HTMLInputElement>("file-action-archive-name"),
+  fileActionProgress: byId<HTMLElement>("file-action-progress"),
+  fileActionProgressBar: byId<HTMLElement>("file-action-progress-bar"),
+  fileActionFeedback: byId<HTMLElement>("file-action-feedback"),
+  fileActionStart: byId<HTMLButtonElement>("file-action-start"),
+  fileActionCancel: byId<HTMLButtonElement>("file-action-cancel"),
   insightsToggle: byId<HTMLButtonElement>("insights-toggle"),
   insightsPanel: byId<HTMLElement>("insights-panel"),
   insightsMode: byId<HTMLSelectElement>("insights-mode"),
@@ -831,6 +895,14 @@ function renderResults(): void {
   ui.empty.hidden = state.results.length > 0 || state.searching;
   renderEmptyState();
   const selected = selectedFiles();
+  const canAct = selected.length > 0 && !state.searching && !state.fileActionBusy && Boolean(state.sourcePathKey)
+    && selected.length <= 100 && state.platform.canPickFolder;
+  ui.fileActionToolbar.hidden = selected.length === 0;
+  ui.fileActionCount.textContent = `${selected.length.toLocaleString("de-DE")} ausgewählt`;
+  for (const button of [ui.actionCopy, ui.actionMove, ui.actionZip]) {
+    button.disabled = !canAct;
+    button.title = selected.length > 100 ? "Pro Aktion sind höchstens 100 Dateien erlaubt." : "";
+  }
   const selectionText = selected.length === 0
     ? "Keine Datei ausgewählt."
     : selected.length === 1
@@ -877,6 +949,115 @@ function render(): void {
   renderResults();
 }
 
+function validActionName(name: string): boolean {
+  return name.length > 0 && name.length <= 100 && name === name.trim()
+    && !name.startsWith(".") && !name.endsWith(".")
+    && !/[\\/:*?"<>|\x00-\x1f\x7f]/.test(name);
+}
+
+function showFileAction(kind: FileActionKind): void {
+  const selected = selectedFiles();
+  if (!selected.length || selected.length > 100 || state.searching || state.fileActionBusy || !state.sourcePathKey) return;
+  selectedAction = kind;
+  ui.fileActionTitle.textContent = kind === "copy" ? "Dateien kopieren" : kind === "move" ? "Dateien verschieben" : "ZIP-Archiv erstellen";
+  ui.fileActionDescription.textContent = kind === "move"
+    ? "Quellen werden erst nach erfolgreicher Kopie und Nachprüfung entfernt."
+    : "Die Originaldateien bleiben erhalten.";
+  const totalBytes = selected.reduce((sum, file) => sum + file.sizeBytes, 0);
+  ui.fileActionSummary.textContent = `${selected.length.toLocaleString("de-DE")} Dateien · ${formatBytes(totalBytes)} · max. 8 GB je Aktion`;
+  ui.fileActionCreateFolder.checked = false;
+  ui.fileActionFolderLabel.hidden = true;
+  ui.fileActionFolderName.value = "";
+  ui.fileActionArchiveLabel.hidden = kind !== "zip";
+  ui.fileActionArchiveName.value = "DateiFinder-Auswahl.zip";
+  ui.fileActionProgress.hidden = true;
+  ui.fileActionFeedback.textContent = "Zielordner wird vor dem Start von dir ausgewählt.";
+  ui.fileActionStart.disabled = false;
+  ui.fileActionStart.textContent = "Zielordner wählen und starten";
+  ui.fileActionCancel.textContent = "Schließen";
+  ui.fileActionDialog.showModal();
+}
+
+function showFileActionProgress(completed: number, total: number, phase: string): void {
+  const percent = total > 0 ? Math.min(100, Math.round(100 * completed / total)) : 0;
+  ui.fileActionProgress.hidden = false;
+  ui.fileActionProgress.setAttribute("aria-valuenow", String(percent));
+  ui.fileActionProgress.setAttribute("aria-valuetext", `${completed} von ${total} Dateien · ${phase}`);
+  ui.fileActionProgressBar.style.width = `${percent}%`;
+  ui.fileActionFeedback.textContent = `${phase}: ${completed} von ${total} Dateien.`;
+  setStatus("Dateiaktion läuft", `${phase} · ${completed} von ${total}`, "working", false);
+}
+
+async function requestFileActionCancel(): Promise<void> {
+  if (!activeFileActionSession) return;
+  ui.fileActionCancel.disabled = true;
+  ui.fileActionFeedback.textContent = "Abbruch angefordert. Die aktuelle Datei wird sicher beendet …";
+  try {
+    await cancelFileAction(activeFileActionSession);
+  } catch (error) {
+    ui.fileActionFeedback.textContent = `Abbruch konnte nicht angefordert werden: ${safeMessage(error)}`;
+  } finally {
+    ui.fileActionCancel.disabled = false;
+  }
+}
+
+async function startFileAction(): Promise<void> {
+  if (state.fileActionBusy || state.searching || !state.sourcePathKey) return;
+  const files = selectedFiles();
+  if (!files.length || files.length > 100) return;
+  const newFolderName = ui.fileActionCreateFolder.checked ? ui.fileActionFolderName.value : null;
+  const archiveName = selectedAction === "zip" ? ui.fileActionArchiveName.value : null;
+  if ((newFolderName !== null && !validActionName(newFolderName))
+    || (archiveName !== null && (!validActionName(archiveName) || !archiveName.toLowerCase().endsWith(".zip")))) {
+    ui.fileActionFeedback.textContent = "Bitte einen gültigen Namen ohne Schrägstrich oder Sonderzeichen eingeben.";
+    return;
+  }
+  const request: FileActionRequest = {
+    sessionId: crypto.randomUUID(), rootPathKey: state.sourcePathKey,
+    pathKeys: files.map((file) => file.pathKey), action: selectedAction, newFolderName, archiveName,
+  };
+  state.fileActionBusy = true;
+  activeFileActionSession = request.sessionId;
+  ui.fileActionStart.disabled = true;
+  ui.fileActionCancel.textContent = "■ Abbrechen";
+  ui.fileActionCreateFolder.disabled = true;
+  ui.fileActionFolderName.disabled = true;
+  ui.fileActionArchiveName.disabled = true;
+  ui.fileActionFeedback.textContent = "Bitte im Systemdialog den Zielordner auswählen. Abbrechen ist möglich.";
+  render();
+  try {
+    const result = await executeFileAction(request);
+    if (result === null) {
+      ui.fileActionFeedback.textContent = "Zielauswahl abgebrochen. Keine Datei verändert.";
+      setStatus("Dateiaktion nicht gestartet", "Es wurde kein Zielordner gewählt.");
+    } else {
+      ui.fileActionFeedback.textContent = `✓ ${result.completed} Datei(en) erfolgreich geprüft und gespeichert: ${result.destination}`;
+      setStatus("Dateiaktion abgeschlossen", `${result.completed} Datei(en) · ${result.destination}`);
+      if (selectedAction === "move") {
+        // Nach dem Verschieben wären die alten Trefferpfade ungültig.
+        const movedIds = new Set(files.map((file) => file.id));
+        state.results = state.results.filter((file) => !movedIds.has(file.id));
+        findingsStats = createFindingsStats();
+        addFindingsBatch(findingsStats, state.results);
+        state.previewId = null;
+      }
+      for (const file of files) state.selectedIds.delete(file.id);
+    }
+  } catch (error) {
+    ui.fileActionFeedback.textContent = `⚠ ${safeMessage(error)} Bitte Ergebnis und Originale prüfen. Bereits abgeschlossene Dateien bleiben erhalten.`;
+    setStatus("Dateiaktion nicht vollständig", safeMessage(error), "warning");
+  } finally {
+    activeFileActionSession = null;
+    state.fileActionBusy = false;
+    ui.fileActionStart.disabled = false;
+    ui.fileActionCreateFolder.disabled = false;
+    ui.fileActionFolderName.disabled = false;
+    ui.fileActionArchiveName.disabled = false;
+    ui.fileActionCancel.textContent = "Schließen";
+    render();
+  }
+}
+
 function focusSourcePicker(): void {
   const target = [ui.sourceNav, ui.mobileSource].find((button) => button.offsetParent !== null && !button.disabled);
   target?.focus();
@@ -884,6 +1065,10 @@ function focusSourcePicker(): void {
 
 async function chooseSource(): Promise<void> {
   try {
+    if (state.fileActionBusy) {
+      setStatus("Dateiaktion läuft", "Bitte die Dateiaktion erst beenden oder abbrechen.", "warning");
+      return;
+    }
     if (state.searching) {
       setStatus("Suche läuft", "Bitte laufende Suche zuerst abbrechen, bevor du den Suchordner wechselst.", "warning");
       return;
@@ -923,6 +1108,10 @@ function useSourceRoot(root: PickedRoot): void {
 }
 
 async function runSearch(): Promise<void> {
+  if (state.fileActionBusy) {
+    setStatus("Dateiaktion läuft", "Bitte vor der nächsten Suche die Dateiaktion abschließen.", "warning");
+    return;
+  }
   const query = ui.query.value.trim();
   state.query = query;
 
@@ -1085,6 +1274,31 @@ async function initialize(): Promise<void> {
   }).catch((error) => {
     console.error("Search events unavailable", error);
     setStatus("Suchereignisse nicht verfügbar", "Die Oberfläche bleibt bedienbar; Suchen ist derzeit nicht möglich.", "error");
+  });
+
+  void listenFileActionProgress((payload) => {
+    if (payload.sessionId !== activeFileActionSession) return;
+    showFileActionProgress(payload.completed, payload.total, payload.phase);
+  }).catch((error) => {
+    console.error("File action progress unavailable", error);
+    setStatus("Dateiaktionen nicht verfügbar", "Fortschrittsanzeige konnte nicht verbunden werden. Bitte neu starten.", "error");
+  });
+
+  ui.actionCopy.addEventListener("click", () => showFileAction("copy"));
+  ui.actionMove.addEventListener("click", () => showFileAction("move"));
+  ui.actionZip.addEventListener("click", () => showFileAction("zip"));
+  ui.fileActionCreateFolder.addEventListener("change", () => {
+    ui.fileActionFolderLabel.hidden = !ui.fileActionCreateFolder.checked;
+  });
+  ui.fileActionStart.addEventListener("click", () => void startFileAction());
+  ui.fileActionCancel.addEventListener("click", () => {
+    if (state.fileActionBusy) void requestFileActionCancel();
+    else ui.fileActionDialog.close();
+  });
+  ui.fileActionDialog.addEventListener("cancel", (event) => {
+    if (!state.fileActionBusy) return;
+    event.preventDefault();
+    void requestFileActionCancel();
   });
 
   ui.sourceNav.addEventListener("click", chooseSource);

@@ -22,21 +22,25 @@ Suchfilter, Statuszeile und Ergebnisbereich sind innerhalb der 768×512-Grenzen.
 Die ältere Cyan-Fixture-Referenz bleibt unverändert. Nur der bewusst geänderte
 Startbildschirm erhält eine aktualisierte Referenz-PNG und SHA-256-Prüfsumme.
 
-## Ausstehend – Dateiaktionen (BLOCKS: Rust- und Browser-CI)
+## Implementiert – Dateiaktionen (Freigabe erst nach Rust- und Browser-CI)
 
-- Kopieren in einen ausgewählten vorhandenen Ordner und auf Wunsch einen neu
-  anzulegenden Unterordner.
-- Verschieben erst nach erfolgreichem und überprüftem Kopiervorgang; bei
-  Fehlern Quelle erhalten, vorhandene Zielpfade nicht überschreiben.
-- ZIP in eine Staging-Datei schreiben, Archiveinträge prüfen, vollständig
-  verifizieren, dann ohne Überschreiben endgültig bereitstellen.
-- Fortschritt, Teilabschluss, Abbruch und sichere Bereinigung temporärer Dateien;
-  Tests ausschließlich in isolierten Testordnern mit Fehler-Injektion.
-- Grenzen für Gesamtgröße/Dateianzahl, Symlinks, Quelldatei-Änderungen während
-  einer Übertragung sowie Laufwerkswechsel explizit behandeln.
+- Kopieren in einen systemseitig gewählten Zielordner, wahlweise mit neuem
+  Unterordner. Eingaben und einzelne Dateipfade werden erneut geprüft.
+- Verschieben durch temporäre Kopie, byteweisen Vergleich und exklusiven
+  Ziel-Commit; Quelle erst danach löschen. Bestehende Ziele werden abgewiesen.
+- ZIP als Zwischenarchiv erzeugen, mittels `zip -T` testen, danach ohne
+  Überschreiben freigeben. `zip` ist dafür als Linux-Systempaket erforderlich.
+- Abbruch-Flag pro Sitzung, gut lesbare Schritte und Fortschritt je Datei;
+  abgeschlossene Dateien werden benannt statt stillschweigend zurückgerollt.
+- Grenzen: 100 Dateien und 8 GiB je Vorgang. Doppelte Dateinamen werden vor
+  dem Schreiben abgewiesen; nicht lesbare Dateien, symlink-aufgelöste Pfade
+  außerhalb des autorisierten Suchorts und Kollisionen führen zu einem Stopp.
+- Temporäre Dateien und noch leere neue Zielordner werden bei Fehlern
+  entfernt. Bei Dateisystemen ohne Hardlinks erfolgt ein exklusiver,
+  überprüfter Ersatzweg ohne Überschreiben.
 
-Ohne erfolgreiches Rust-Toolchain- und CI-Gate sind die noch ausstehenden
-**schreibenden** Dateiaktionen bewusst nicht freizugeben. Sicherheitsprüfungen
+Ohne erfolgreiches Rust-Toolchain- und CI-Gate sind die neuen
+**schreibenden** Dateiaktionen bewusst noch nicht freizugeben. Sicherheitsprüfungen
 dürfen nicht allein aufgrund eines erfolgreichen Frontend-Builds als bestanden
 bezeichnet werden.
 
@@ -44,6 +48,6 @@ bezeichnet werden.
 
 1. Für den vorliegenden Stand den Rust-Gate und den vollständigen UI-Gate
    inklusive 768×512, vier Themes und 200 %-Ansicht ausführen.
-2. Danach die Dateiaktionen einzeln mit sicheren Transfer-Transaktionen
-   implementieren und an Testdateien validieren.
+2. Neue Dateiaktionen inklusive isolierter Rust-Testdateien und Browser-Tests
+   gegen Kopie, Verschiebung, ZIP, Kollision und Abbruch prüfen.
 3. Erst nach grünen Nachweisen PR freigeben und mergen.

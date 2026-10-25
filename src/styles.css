@@ -678,6 +678,62 @@ button:disabled {
   min-height: 0;
 }
 
+.file-action-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 9px;
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.32);
+  background: rgba(var(--accent-rgb), 0.075);
+}
+
+.file-action-toolbar > span {
+  margin-right: auto;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.file-action-button {
+  min-height: 29px;
+  padding: 4px 9px;
+  border: 1px solid rgba(var(--accent-rgb), 0.56);
+  border-radius: 7px;
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.11);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.file-action-button:hover:not(:disabled), .file-action-button:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 13px rgba(var(--accent-rgb), 0.35);
+}
+
+.file-action-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.file-action-dialog { max-height: calc(100vh - 32px); overflow-y: auto; }
+.file-action-fields { display: grid; gap: 11px; padding: 15px 20px; }
+.file-action-fields label { display: grid; gap: 5px; color: var(--text-primary); font-size: 12px; }
+.file-action-fields input[type="text"] {
+  min-width: 0;
+  width: 100%;
+  padding: 9px;
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+}
+.file-action-fields .file-action-checkbox { display: flex; align-items: center; gap: 8px; }
+.file-action-fields .file-action-safety { line-height: 1.55; }
+.file-action-fields .file-action-feedback { color: var(--accent); line-height: 1.45; overflow-wrap: anywhere; }
+.file-action-progress { height: 8px; border: 1px solid rgba(var(--accent-rgb), 0.3); border-radius: 6px; overflow: hidden; background: rgba(0, 0, 0, 0.35); }
+.file-action-progress > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+.file-action-dialog-buttons { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 20px; }
+.file-action-dialog-buttons button { flex: 1 1 145px; min-height: 37px; }
+
 .insights-panel {
   min-width: 0;
   padding: 8px 11px 10px;

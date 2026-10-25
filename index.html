@@ -78,6 +78,12 @@
                   <span id="metric-filter" class="metric-filter">Alle Typen</span>
                 </div>
                 <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
+                <div id="file-action-toolbar" class="file-action-toolbar" aria-label="Aktionen für ausgewählte Dateien" hidden>
+                  <span id="file-action-count">0 ausgewählt</span>
+                  <button id="action-copy" type="button" class="file-action-button">⧉ Kopieren</button>
+                  <button id="action-move" type="button" class="file-action-button">↗ Verschieben</button>
+                  <button id="action-zip" type="button" class="file-action-button">▣ Als ZIP</button>
+                </div>
                 <section id="insights-panel" class="insights-panel" aria-label="Grafische Fund-Statistik" hidden>
                   <div class="insights-topline">
                     <label for="insights-mode">Funde nach <select id="insights-mode" aria-label="Auswertung nach"><option value="type">Dateityp</option><option value="year">Jahr</option><option value="size">Dateigröße</option></select></label>
@@ -158,6 +164,26 @@
         <button id="return-use" class="primary-button" type="button" disabled>✓ Diesen Ordner verwenden</button>
         <button id="return-change" type="button">📁 Anderen Ordner wählen</button>
         <button id="return-later" type="button">Jetzt nicht</button>
+      </div>
+    </dialog>
+    <dialog id="file-action-dialog" class="help-dialog file-action-dialog" aria-labelledby="file-action-title">
+      <div class="help-dialog-heading"><h2 id="file-action-title">Dateien kopieren</h2><p id="file-action-description">Die Dateien bleiben am ursprünglichen Ort erhalten.</p></div>
+      <div class="file-action-fields">
+        <p id="file-action-summary" class="file-action-summary">Auswahl prüfen …</p>
+        <label class="file-action-checkbox"><input id="file-action-create-folder" type="checkbox" /> Im Ziel einen neuen Unterordner anlegen</label>
+        <label id="file-action-folder-label" for="file-action-folder-name" hidden>Name des neuen Ordners
+          <input id="file-action-folder-name" type="text" maxlength="100" autocomplete="off" placeholder="z. B. Archiv 2026" />
+        </label>
+        <label id="file-action-archive-label" for="file-action-archive-name" hidden>ZIP-Dateiname
+          <input id="file-action-archive-name" type="text" maxlength="100" value="DateiFinder-Auswahl.zip" spellcheck="false" />
+        </label>
+        <p class="file-action-safety">✓ Prüfung vor und nach dem Kopieren · Keine vorhandene Datei wird überschrieben · Temporäre Daten werden bei Fehlern entfernt. Bei Verschieben wird die Quelle erst nach erfolgreicher Prüfung gelöscht.</p>
+        <div id="file-action-progress" class="file-action-progress" role="progressbar" aria-label="Dateiaktion" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><span id="file-action-progress-bar"></span></div>
+        <p id="file-action-feedback" class="file-action-feedback" role="status" aria-live="polite"></p>
+      </div>
+      <div class="file-action-dialog-buttons">
+        <button id="file-action-start" type="button" class="primary-button">Zielordner wählen und starten</button>
+        <button id="file-action-cancel" type="button">Schließen</button>
       </div>
     </dialog>
     <script type="module" src="/src/main.ts"></script>

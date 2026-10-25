@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+mod file_actions;
+use file_actions::{perform_file_action, valid_name, valid_session_id, ActionKind, ActionOptions, MAX_ACTION_FILES};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
     ffi::OsString,
@@ -30,6 +32,36 @@ pub struct SearchRegistry(pub Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
 
 #[derive(Clone, Default)]
 pub struct AllowedRoots(pub Arc<Mutex<HashSet<PathBuf>>>);
+
+#[derive(Clone, Default)]
+pub struct FileActionRegistry(pub Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileActionRequest {
+    session_id: String,
+    root_path_key: String,
+    path_keys: Vec<String>,
+    action: String,
+    new_folder_name: Option<String>,
+    archive_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileActionResult {
+    completed: usize,
+    destination: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileActionProgress {
+    session_id: String,
+    completed: usize,
+    total: usize,
+    phase: String,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -801,6 +833,108 @@ fn preview_text(
 }
 
 #[tauri::command]
+async fn execute_file_action(
+    app: AppHandle,
+    registry: State<'_, FileActionRegistry>,
+    search_registry: State<'_, SearchRegistry>,
+    allowed_roots: State<'_, AllowedRoots>,
+    request: FileActionRequest,
+) -> Result<Option<FileActionResult>, String> {
+    if !valid_session_id(&request.session_id) {
+        return Err("Ungültige Aktionskennung.".into());
+    }
+    if request.path_keys.is_empty() || request.path_keys.len() > MAX_ACTION_FILES {
+        return Err(format!("Bitte 1 bis {MAX_ACTION_FILES} Dateien auswählen."));
+    }
+    if search_registry.0.lock().map_err(|_| "Suchstatus blockiert.")?.len() > 0 {
+        return Err("Bitte die laufende Suche vor Dateiaktionen beenden.".into());
+    }
+    let kind = ActionKind::parse(&request.action)?;
+    if let Some(name) = &request.new_folder_name {
+        if !valid_name(name) { return Err("Ungültiger neuer Ordnername.".into()); }
+    }
+    if kind == ActionKind::Zip {
+        let name = request.archive_name.as_deref().unwrap_or("DateiFinder-Auswahl.zip");
+        if !valid_name(name) || !name.to_ascii_lowercase().ends_with(".zip") {
+            return Err("Ungültiger ZIP-Archivname.".into());
+        }
+    }
+    let root = decode_path(&request.root_path_key)?
+        .canonicalize().map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
+    let is_allowed = allowed_roots.0.lock().map_err(|_| "Berechtigungsstatus blockiert.")?
+        .contains(&root);
+    if !is_allowed { return Err("Der Suchort ist nicht freigegeben.".into()); }
+    let sources: Vec<PathBuf> = request.path_keys.iter()
+        .map(|key| validated_allowed_file(&allowed_roots, &request.root_path_key, key))
+        .collect::<Result<_, _>>()?;
+    file_actions::preflight_sources(&root, &sources)?;
+
+    let selected = app.dialog().file()
+        .set_title("Zielordner für Dateiaktion auswählen")
+        .blocking_pick_folder();
+    let Some(selected) = selected else { return Ok(None); };
+    let chosen = selected.into_path()
+        .map_err(|error| format!("Zielordner ist kein lokaler Pfad: {error}"))?;
+    let destination = chosen.canonicalize()
+        .map_err(|error| format!("Zielordner kann nicht geöffnet werden: {error}"))?;
+    if !destination.is_dir() || fs::read_dir(&destination).is_err() {
+        return Err("Zielordner ist nicht lesbar.".into());
+    }
+
+    let mut active = registry.0.lock().map_err(|_| "Dateiaktionsstatus blockiert.")?;
+    if !active.is_empty() { return Err("Es läuft bereits eine Dateiaktion. Bitte warten oder abbrechen.".into()); }
+    let flag = Arc::new(AtomicBool::new(false));
+    active.insert(request.session_id.clone(), flag.clone());
+    drop(active);
+
+    let session = request.session_id.clone();
+    let callback_session = session.clone();
+    let app_for_progress = app.clone();
+    let new_folder_name = request.new_folder_name.clone();
+    let archive_name = request.archive_name.clone();
+    let operation = tauri::async_runtime::spawn_blocking(move || {
+        let actual_destination = if let Some(folder_name) = new_folder_name {
+            let path = destination.join(folder_name);
+            fs::create_dir(&path).map_err(|error| format!("Neuer Zielordner konnte nicht angelegt werden: {error}"))?;
+            path
+        } else { destination.clone() };
+        let result = perform_file_action(
+            &root,
+            &sources,
+            &actual_destination,
+            ActionOptions { kind, archive_name: archive_name.as_deref(), session_id: &session },
+            &flag,
+            |completed, total, phase| {
+                let _ = app_for_progress.emit("file-action-progress", FileActionProgress {
+                    session_id: callback_session.clone(), completed, total, phase: phase.into(),
+                });
+            },
+        );
+        // Ein frisch angelegter, noch leerer Unterordner wird bei Fehlern entfernt.
+        // Kein rekursives Löschen: Nur wirklich leere Verzeichnisse sind betroffen.
+        if result.is_err() && actual_destination != destination {
+            let _ = fs::remove_dir(&actual_destination);
+        }
+        result
+    }).await;
+    if let Ok(mut active) = registry.0.lock() { active.remove(&request.session_id); }
+    let outcome = operation.map_err(|error| format!("Dateiaktion konnte nicht abgeschlossen werden: {error}"))??;
+    Ok(Some(FileActionResult {
+        completed: outcome.completed,
+        destination: outcome.destination.to_string_lossy().into_owned(),
+    }))
+}
+
+#[tauri::command]
+fn cancel_file_action(registry: State<'_, FileActionRegistry>, session_id: String) -> Result<(), String> {
+    let active = registry.0.lock().map_err(|_| "Dateiaktionsstatus blockiert.")?;
+    if let Some(flag) = active.get(&session_id) {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn cancel_search(registry: State<'_, SearchRegistry>, session_id: String) -> Result<(), String> {
     let sessions = registry
         .0
@@ -968,6 +1102,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(SearchRegistry::default())
         .manage(AllowedRoots::default())
+        .manage(FileActionRegistry::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -984,6 +1119,8 @@ pub fn run() {
             export_results,
             import_search_presets,
             export_search_presets,
+            execute_file_action,
+            cancel_file_action,
         ])
         .run(tauri::generate_context!())
         .expect("DateiFinder konnte nicht gestartet werden");

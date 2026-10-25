@@ -4,7 +4,7 @@ const themes = ["cyan", "purple", "green", "orange"] as const;
 
 async function installSearchAdapter(
   page: import("@playwright/test").Page,
-  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[]; sizes?: number[]; modifiedTimes?: (number | null)[]; names?: string[]; extensions?: string[]; previewContent?: string } = {},
+  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[]; sizes?: number[]; modifiedTimes?: (number | null)[]; names?: string[]; extensions?: string[]; previewContent?: string; actionDelayMs?: number } = {},
 ) {
   await page.addInitScript((testOptions) => {
     const {
@@ -18,9 +18,13 @@ async function installSearchAdapter(
       previewContent = "Beispieltext",
       limitReached = false,
       reportedResultCount = itemCount,
+      actionDelayMs = 0,
     } = testOptions;
     const runtime = window as typeof window & {
       __lastSearchRequest?: unknown;
+      __lastFileActionRequest?: unknown;
+      __cancelledAction?: string;
+      __fileActionProgress?: (payload: { sessionId: string; completed: number; total: number; phase: string }) => void;
       __searchListeners?: {
         onBatch(payload: unknown): void;
         onProgress(payload: unknown): void;
@@ -81,6 +85,19 @@ async function installSearchAdapter(
         });
       },
       async cancelSearch() {},
+      async listenFileActionProgress(callback) {
+        runtime.__fileActionProgress = callback;
+        return () => {};
+      },
+      async executeFileAction(request) {
+        runtime.__lastFileActionRequest = request;
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: 0, total: request.pathKeys.length, phase: "Vorprüfung" });
+        if (actionDelayMs) await new Promise((resolve) => setTimeout(resolve, actionDelayMs));
+        if (runtime.__cancelledAction === request.sessionId) throw new Error("Dateiaktion wurde abgebrochen.");
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: request.pathKeys.length, total: request.pathKeys.length, phase: "Dateien geprüft" });
+        return { completed: request.pathKeys.length, destination: "/test/Ziel" };
+      },
+      async cancelFileAction(sessionId) { runtime.__cancelledAction = sessionId; },
     };
   }, options);
 }
@@ -122,6 +139,59 @@ test("result selection keeps keyboard focus and exposes a concise selection summ
   await expect(page.locator("#selection-summary")).toHaveText("1 Datei ausgewählt.");
   await expect(page.locator(".row-check")).toHaveAttribute("aria-hidden", "true");
   await expect(page.locator(".file-icon")).toHaveAttribute("aria-hidden", "true");
+});
+
+for (const action of ["copy", "move", "zip"] as const) {
+  test(`${action} offers a safe target-dialog workflow with lossless path keys`, async ({ page }) => {
+    await installSearchAdapter(page);
+    await page.goto("/");
+    await expect(page.locator("#file-action-toolbar")).toBeHidden();
+    await page.locator("#choose-source-nav").click();
+    await page.locator("#query-input").fill("rechnung");
+    await page.locator("#search-button").click();
+    await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+    await page.locator(".result-row").click();
+    await expect(page.locator("#file-action-toolbar")).toBeVisible();
+    await page.locator(`#action-${action}`).click();
+    await expect(page.locator("#file-action-dialog")).toBeVisible();
+    await page.locator("#file-action-create-folder").check();
+    await page.locator("#file-action-folder-name").fill("Archiv 2026");
+    if (action === "zip") {
+      await page.locator("#file-action-archive-name").fill("auswahl.zip");
+    }
+    await page.locator("#file-action-start").click();
+    await expect(page.locator("#file-action-feedback")).toContainText("erfolgreich geprüft und gespeichert");
+    const request = await page.evaluate(() => (window as typeof window & {
+      __lastFileActionRequest?: Record<string, unknown>;
+    }).__lastFileActionRequest);
+    expect(request).toMatchObject({
+      action,
+      rootPathKey: "test-root",
+      pathKeys: ["invoice-key-0"],
+      newFolderName: "Archiv 2026",
+      archiveName: action === "zip" ? "auswahl.zip" : null,
+    });
+    await expect(page.locator("#file-action-cancel")).toHaveText("Schließen");
+    if (action === "move") await expect(page.locator(".result-row")).toHaveCount(0);
+  });
+}
+
+test("in-progress file operation can be cancelled without closing the safety dialog", async ({ page }) => {
+  await installSearchAdapter(page, { actionDelayMs: 500 });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+  await page.locator(".result-row").click();
+  await page.locator("#action-copy").click();
+  await page.locator("#file-action-start").click();
+  await expect(page.locator("#file-action-cancel")).toHaveText("■ Abbrechen");
+  await page.locator("#file-action-cancel").click();
+  await expect(page.locator("#file-action-dialog")).toBeVisible();
+  await expect(page.locator("#file-action-feedback")).toContainText("abgebrochen");
+  const cancelledId = await page.evaluate(() => (window as typeof window & { __cancelledAction?: string }).__cancelledAction);
+  expect(cancelledId).toMatch(/[0-9a-f-]{36}/);
 });
 
 test("large result sets render only the visible virtual window", async ({ page }) => {
