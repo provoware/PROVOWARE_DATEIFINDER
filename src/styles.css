@@ -618,8 +618,12 @@ button:disabled {
 .results-panel {
   position: relative;
   display: grid;
-  grid-template-rows: 43px auto minmax(0, 1fr);
+  grid-template-rows: 43px 29px auto minmax(0, 1fr);
   overflow: hidden;
+}
+
+.results-panel:has(.results-overview) {
+  grid-template-rows: 43px auto minmax(0, 1fr);
 }
 
 .panel-heading {
@@ -1220,7 +1224,8 @@ body[data-theme="orange"] {
   .chips { margin-top: 9px; gap: 7px; }
   .chips button { min-height: 29px; padding: 5px 11px; font-size: 12px; }
 
-  .results-panel { grid-template-rows: 56px auto minmax(0, 1fr); }
+  .results-panel { grid-template-rows: 56px 43px auto minmax(0, 1fr); }
+  .results-panel:has(.results-overview) { grid-template-rows: 56px auto minmax(0, 1fr); }
   .panel-heading { padding: 11px 16px; }
   .panel-heading h2 { font-size: 18px; }
   .panel-heading h2 span { font-size: 13px; }

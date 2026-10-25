@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 const APPROVED_768X512_SHA256 = "1d4e722121803ad4d25255b1b5782e385d4a61f70fee3c0455bc318ed654b57d";
@@ -18,6 +19,7 @@ test("768x512 Golden Reference", async ({ page }, testInfo) => {
   const actualHash = createHash("sha256").update(screenshot).digest("hex");
 
   if (actualHash !== APPROVED_768X512_SHA256) {
+    await writeFile(testInfo.outputPath("dateifinder-actual.png"), screenshot);
     await testInfo.attach("dateifinder-768x512-actual.png", {
       body: screenshot,
       contentType: "image/png",

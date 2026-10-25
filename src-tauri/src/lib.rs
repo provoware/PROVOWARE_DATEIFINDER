@@ -175,10 +175,32 @@ fn classify(extension: &str) -> &'static str {
 }
 
 fn is_readable_text(path: &Path) -> bool {
-    let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or("");
-    matches!(extension.to_ascii_lowercase().as_str(),
-        "txt" | "md" | "csv" | "json" | "log" | "ini" | "toml" | "yaml" | "yml"
-        | "xml" | "html" | "htm" | "css" | "js" | "ts" | "py" | "rs" | "sh" | "conf")
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("");
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "txt"
+            | "md"
+            | "csv"
+            | "json"
+            | "log"
+            | "ini"
+            | "toml"
+            | "yaml"
+            | "yml"
+            | "xml"
+            | "html"
+            | "htm"
+            | "css"
+            | "js"
+            | "ts"
+            | "py"
+            | "rs"
+            | "sh"
+            | "conf"
+    )
 }
 
 fn bounded_utf8_text(path: &Path) -> Result<String, String> {
@@ -187,7 +209,9 @@ fn bounded_utf8_text(path: &Path) -> Result<String, String> {
     }
     let metadata = fs::metadata(path).map_err(|error| format!("Datei nicht lesbar: {error}"))?;
     if !metadata.is_file() || metadata.len() > MAX_TEXT_BYTES {
-        return Err("Diese Textdatei ist für eine schnelle Vorschau zu groß (maximal 256 KB).".into());
+        return Err(
+            "Diese Textdatei ist für eine schnelle Vorschau zu groß (maximal 256 KB).".into(),
+        );
     }
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
     fs::File::open(path)
@@ -510,10 +534,14 @@ where
                 }
                 let safe_path = match canonical_child(&canonical_root, &entry.path()) {
                     Ok(path) => path,
-                    Err(_) => { skipped_count += 1; continue; }
+                    Err(_) => {
+                        skipped_count += 1;
+                        continue;
+                    }
                 };
                 match bounded_utf8_text(&safe_path) {
-                    Ok(contents) if matches_name(&contents, filters.tokens, filters.match_mode) => {}
+                    Ok(contents) if matches_name(&contents, filters.tokens, filters.match_mode) => {
+                    }
                     _ => continue,
                 }
             }
@@ -869,23 +897,31 @@ async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, Stri
 
 #[tauri::command]
 async fn import_search_presets(app: AppHandle) -> Result<Option<String>, String> {
-    let selected = app.dialog().file()
+    let selected = app
+        .dialog()
+        .file()
         .set_title("Suchvorlagen importieren")
         .add_filter("DateiFinder-Vorlagen", &["json"])
         .blocking_pick_file();
-    let Some(selected) = selected else { return Ok(None); };
-    let path = selected.into_path()
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    let path = selected
+        .into_path()
         .map_err(|error| format!("Vorlagendatei ist kein lokaler Pfad: {error}"))?;
     let metadata = fs::metadata(&path).map_err(|error| format!("Datei nicht lesbar: {error}"))?;
     if !metadata.is_file() || metadata.len() > 64 * 1024 {
         return Err("Die Vorlagendatei ist zu groß (maximal 64 KB).".into());
     }
     let mut contents = String::new();
-    fs::File::open(&path).map_err(|error| format!("Datei nicht lesbar: {error}"))?
+    fs::File::open(&path)
+        .map_err(|error| format!("Datei nicht lesbar: {error}"))?
         .take(64 * 1024 + 1)
         .read_to_string(&mut contents)
         .map_err(|_| "Die Vorlagendatei ist kein gültiger UTF-8-Text.".to_string())?;
-    if contents.len() > 64 * 1024 || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err() {
+    if contents.len() > 64 * 1024
+        || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err()
+    {
         return Err("Die Vorlagendatei enthält keine gültige Vorlagenliste.".into());
     }
     Ok(Some(contents))
@@ -893,23 +929,37 @@ async fn import_search_presets(app: AppHandle) -> Result<Option<String>, String>
 
 #[tauri::command]
 async fn export_search_presets(app: AppHandle, contents: String) -> Result<bool, String> {
-    if contents.len() > 64 * 1024 || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err() {
+    if contents.len() > 64 * 1024
+        || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err()
+    {
         return Err("Die Vorlagenliste ist ungültig oder zu groß.".into());
     }
-    let selected = app.dialog().file()
+    let selected = app
+        .dialog()
+        .file()
         .set_title("Suchvorlagen exportieren")
         .set_file_name("dateifinder-vorlagen.json")
         .add_filter("JSON", &["json"])
         .blocking_save_file();
-    let Some(selected) = selected else { return Ok(false); };
-    let path = selected.into_path()
+    let Some(selected) = selected else {
+        return Ok(false);
+    };
+    let path = selected
+        .into_path()
         .map_err(|error| format!("Ziel ist kein lokaler Pfad: {error}"))?;
     // Die native Dateiauswahl autorisiert das Ziel; vorhandene Dateien überschreiben wir dennoch nicht.
-    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)
-        .map_err(|error| format!("Ziel nicht frei (bestehende Dateien werden nicht überschrieben): {error}"))?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|error| {
+            format!("Ziel nicht frei (bestehende Dateien werden nicht überschrieben): {error}")
+        })?;
     use std::io::Write;
-    file.write_all(contents.as_bytes()).map_err(|error| format!("Vorlagen konnten nicht geschrieben werden: {error}"))?;
-    file.sync_all().map_err(|error| format!("Vorlagen konnten nicht gesichert werden: {error}"))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|error| format!("Vorlagen konnten nicht geschrieben werden: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("Vorlagen konnten nicht gesichert werden: {error}"))?;
     Ok(true)
 }
 
@@ -1219,7 +1269,11 @@ mod tests {
         let root = temp_test_dir("content-bounded");
         fs::write(root.join("notiz.txt"), "Ein wichtiger geheimer Hinweis.").expect("write text");
         fs::write(root.join("bild.png"), b"geheimer\0binary").expect("write binary");
-        fs::write(root.join("lang.txt"), vec![b'a'; (MAX_TEXT_BYTES + 1) as usize]).expect("write oversized");
+        fs::write(
+            root.join("lang.txt"),
+            vec![b'a'; (MAX_TEXT_BYTES + 1) as usize],
+        )
+        .expect("write oversized");
         let cancelled = AtomicBool::new(false);
         let mut matches = Vec::new();
         let outcome = scan_directory(
@@ -1230,9 +1284,13 @@ mod tests {
                 file_types: &HashSet::new(),
                 search_contents: true,
             },
-            10, 100, &cancelled,
-            |event| if let ScanEvent::Batch { items, .. } = event {
-                matches.extend(items.into_iter().map(|item| item.display_name));
+            10,
+            100,
+            &cancelled,
+            |event| {
+                if let ScanEvent::Batch { items, .. } = event {
+                    matches.extend(items.into_iter().map(|item| item.display_name));
+                }
             },
         );
         assert_eq!(outcome.result_count, 1);
