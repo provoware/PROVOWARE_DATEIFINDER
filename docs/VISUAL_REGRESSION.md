@@ -59,6 +59,21 @@ neuen SHA-256-Prüfsummen der PNG-Aufnahmen gemessen:
 Die Prüfsummen sind zur geänderten Oberfläche versioniert; die vollständige
 Browser- und Layoutabnahme bleibt ein eigenständiges Pflicht-Gate.
 
+### Bewusste Referenzanpassung – Farben für Dateiarten
+
+Die Trefferzeilen besitzen jetzt abhängig vom Dateityp einen dezenten
+Farbverlauf. Das 768×512-Hauptfenster bleibt unverändert; nur die
+Beispiel-Trefferliste der Cyan-Fixture zeigt die neue Zeilenfarbe. Der
+GitHub-CI-Lauf `40196871576` hat für diese beabsichtigte Änderung
+folgende neue PNG-SHA-256-Prüfsumme ermittelt:
+
+- Cyan-Fixture: `cbc76211e6e5e06840232c65f06234561e9c4a5644a57bc1d85123691a3f6019`
+- Hauptfenster: weiterhin `1d4e722121803ad4d25255b1b5782e385d4a61f70fee3c0455bc318ed654b57d`
+
+Die Regression umfasst weiterhin beide unabhängigen Referenzen. Die neue
+Trefferfarbgebung wird zusätzlich für vier Themes im interaktiven Browser-
+Test geprüft.
+
 Eine visuelle Änderung gilt erst als freigegeben, wenn:
 
 1. die 768×512-Darstellung bewusst geprüft wurde,

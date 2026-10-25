@@ -16,6 +16,9 @@ AUDIT=0
 PHASE="Initialisierung"
 LOG_FILE=""
 TMP_INSTALLER=""
+START_WARNING=0
+PORT_LISTENERS=""
+DEV_PORT=1420
 
 usage() {
   cat <<'HELP'
@@ -23,15 +26,16 @@ PROVOWARE DateiFinder – sicherer Start
 
   ./start.sh              Prüfen, fehlende Komponenten nach Zustimmung
                           installieren und den DateiFinder starten.
-  ./start.sh --check      Nur prüfen, nichts installieren und nicht starten.
-  ./start.sh --no-repair  Starten, wenn bereits alles vorhanden ist.
-  ./start.sh --yes        Vorgeschlagene Installationen ohne Rückfrage
-                          ausführen (sudo kann ein Passwort verlangen).
+  ./start.sh --check      Nur prüfen, nichts verändern und nicht starten.
+  ./start.sh --no-repair  Starten, wenn bereits alles frei und vorhanden ist.
+  ./start.sh --yes        Sichere Reparaturen ohne Rückfrage freigeben:
+                          fehlende Pakete und eigene verwaiste Vite-Prozesse.
   ./start.sh --audit      Zusätzlich npm-Sicherheitsprüfung durchführen.
   ./start.sh --help       Diese Hilfe anzeigen.
 
-Wichtig: Das Skript führt niemals automatisch "npm audit fix --force",
-"apt upgrade" oder eine Löschung von Projektdateien aus.
+Wichtig: Fremde Prozesse werden nie beendet. Eigene Vite-Prozesse nur,
+wenn Benutzer, Projektordner und Startbefehl eindeutig übereinstimmen.
+Kein "npm audit fix --force", "apt upgrade" oder Quellcode-Löschen.
 HELP
 }
 
@@ -57,7 +61,7 @@ diagnose_log() {
   recent="$(tail -n 100 "$LOG_FILE")"
   if grep -Eqi 'ENOSPC|No space left on device' <<< "$recent"; then
     say "  Tipp: Der Speicherplatz ist knapp. Bitte freien Festplattenspeicher prüfen."
-  elif grep -Eqi 'EADDRINUSE|address already in use|port .+ is in use' <<< "$recent"; then
+  elif grep -Eqi 'EADDRINUSE|address already in use|port [0-9]+ is( already)? in use' <<< "$recent"; then
     say "  Tipp: Der benötigte Netzwerkport ist schon belegt. Ein anderer Programmstart könnte noch laufen."
   elif grep -Eqi 'EACCES|permission denied|Zugriff verweigert' <<< "$recent"; then
     say "  Tipp: Es fehlen Zugriffsrechte. Projekt möglichst im eigenen Benutzerordner ausführen."
@@ -154,6 +158,85 @@ consent() {
     j|J|ja|Ja|JA|y|Y|yes|Yes|YES) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Nur den lokalen Entwicklungsport prüfen. Weder fremde Dienste noch andere
+# DateiFinder-Kopien dürfen vom Reparaturassistenten beendet werden.
+read_port_listeners() {
+  PORT_LISTENERS=""
+  command -v ss >/dev/null 2>&1 || return 2
+  if ! PORT_LISTENERS="$(ss -H -ltnp "( sport = :$DEV_PORT )" 2>>"$LOG_FILE")"; then
+    return 2
+  fi
+  [[ -z "$PORT_LISTENERS" ]]
+}
+
+is_own_vite_process() {
+  local pid="$1" uid cwd executable command_line
+  [[ "$pid" =~ ^[0-9]+$ && -d "/proc/$pid" ]] || return 1
+  uid="$(stat -c '%u' "/proc/$pid" 2>/dev/null)" || return 1
+  [[ "$uid" == "${EUID:-$(id -u)}" ]] || return 1
+  cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null)" || return 1
+  [[ "$cwd" == "$PROJECT_DIR" ]] || return 1
+  executable="$(readlink -f "/proc/$pid/exe" 2>/dev/null)" || return 1
+  [[ "${executable##*/}" == node || "${executable##*/}" == nodejs ]] || return 1
+  command_line="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)" || return 1
+  # Vite startet im Projekt als Node-Skript, nie nur nach dem Prozessnamen
+  # "node" entscheiden. Ein ähnlicher Fremdprozess reicht nicht aus.
+  [[ "$command_line" == *"node_modules/.bin/vite"* ||
+     "$command_line" == *"node_modules/vite/bin/vite.js"* ]] || return 1
+  [[ "$command_line" == *"--port $DEV_PORT"* ]]
+}
+
+ensure_dev_port_available() {
+  local status pid attempt
+  local -a pids=()
+  if read_port_listeners; then return 0; else status=$?; fi
+
+  if (( status == 2 )); then
+    say "  ! Portprüfung nicht verfügbar (Werkzeug ss fehlt oder liefert einen Fehler)."
+    say "    Bei einem Startfehler hilft: sudo ss -ltnp '( sport = :$DEV_PORT )'"
+    START_WARNING=1
+    return 0
+  fi
+
+  say "  ! Port $DEV_PORT ist bereits belegt. Der DateiFinder kann so nicht starten."
+  if (( CHECK_ONLY )); then
+    say "    Keine Änderung vorgenommen. Belegenden Prozess prüfen: ss -ltnp '( sport = :$DEV_PORT )'"
+    START_WARNING=1
+    return 0
+  fi
+
+  mapfile -t pids < <(grep -oE 'pid=[0-9]+' <<< "$PORT_LISTENERS" | cut -d= -f2 | sort -u)
+  if (( ${#pids[@]} != 1 )); then
+    fail "Der belegende Prozess ist nicht eindeutig erkennbar. Bitte mit 'sudo ss -ltnp ( sport = :$DEV_PORT )' prüfen und das andere Programm selbst schließen."
+  fi
+  pid="${pids[0]}"
+  if ! is_own_vite_process "$pid"; then
+    fail "Port $DEV_PORT gehört keinem eindeutig zugeordneten Vite-Prozess aus diesem Projekt. PID $pid wird nicht beendet. Bitte den anderen Dienst selbst schließen."
+  fi
+
+  say "  ✓ Eigener Vite-Prozess aus diesem Projekt erkannt (PID $pid)."
+  if ! consent "Diesen alten Entwicklungsserver sicher beenden und neu starten?"; then
+    fail "Port $DEV_PORT bleibt belegt. Keine Prozesse wurden verändert."
+  fi
+
+  # Vor dem Signal erneut zuordnen (Schutz bei zwischenzeitlichem PID-Wechsel).
+  if ! is_own_vite_process "$pid"; then
+    fail "Der Prozess hat sich inzwischen verändert. Aus Sicherheitsgründen kein Beenden."
+  fi
+  if ! kill -TERM -- "$pid" 2>>"$LOG_FILE"; then
+    fail "Der alte Vite-Prozess konnte nicht beendet werden. Bitte selbst prüfen."
+  fi
+  say "  … Warte, bis Port $DEV_PORT wieder frei ist."
+  for (( attempt = 0; attempt < 20; attempt++ )); do
+    sleep 0.2
+    if read_port_listeners; then
+      say "  ✓ Port $DEV_PORT ist wieder frei."
+      return 0
+    fi
+  done
+  fail "Port $DEV_PORT bleibt trotz Stoppsignal belegt. Kein erzwungenes Beenden; bitte Prozess prüfen."
 }
 
 run_step() {
@@ -349,9 +432,17 @@ if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
   fi
 fi
 
+PHASE="Entwicklungsport prüfen"
+say "  … Prüfe, ob Entwicklungsport $DEV_PORT frei ist"
+ensure_dev_port_available
+
 if (( CHECK_ONLY )); then
   say ""
-  say "✓ Vorprüfung erfolgreich. Mit ./start.sh kannst du die Anwendung starten."
+  if (( START_WARNING )); then
+    say "! Vorprüfung mit Hinweis abgeschlossen. Bitte oben genannte Portwarnung beachten."
+  else
+    say "✓ Vorprüfung erfolgreich. Mit ./start.sh kannst du die Anwendung starten."
+  fi
   say "Protokoll: $LOG_FILE"
   exit 0
 fi
@@ -363,13 +454,25 @@ say "  Beenden jederzeit mit Strg+C."
 say "  Protokoll: $LOG_FILE"
 say ""
 
-if npm run tauri -- dev 2>&1 | tee -a "$LOG_FILE"; then
-  app_status=0
-else
-  # Fehler sind hier erwartet möglich. Innerhalb von if greift der
-  # allgemeine ERR-Trap nicht vor unserer verständlichen Fehlermeldung.
-  app_status=${PIPESTATUS[0]}
-fi
+for attempt in 1 2; do
+  if npm run tauri -- dev 2>&1 | tee -a "$LOG_FILE"; then
+    app_status=0
+  else
+    # Fehler sind hier erwartet möglich. Innerhalb von if greift der
+    # allgemeine ERR-Trap nicht vor unserer verständlichen Fehlermeldung.
+    app_status=${PIPESTATUS[0]}
+  fi
+  if (( app_status == 0 || app_status == 130 )); then break; fi
+  if (( attempt == 1 )) && tail -n 60 "$LOG_FILE" | grep -Eqi 'EADDRINUSE|address already in use|port [0-9]+ is( already)? in use'; then
+    PHASE="Portkonflikt nach Startversuch beheben"
+    say "  ! Portkonflikt erst während des Starts erkannt. Prüfe eine sichere Korrektur …"
+    ensure_dev_port_available
+    say "  … Zweiter und letzter Startversuch."
+    PHASE="DateiFinder starten"
+    continue
+  fi
+  break
+done
 if (( app_status != 0 && app_status != 130 )); then
   fail "Die Anwendung wurde mit Fehlercode $app_status beendet. Die Ursache steht am Ende des Protokolls." "$app_status"
 fi
