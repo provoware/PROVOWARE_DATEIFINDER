@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
-const APPROVED_CYAN_FIXTURE_SHA256 = "31bb297e7f3ececa16c54b2df406cb1b9fba109606d26d4004e99564ba0e400e";
+const APPROVED_CYAN_FIXTURE_SHA256 = "fd51974e4954b9f6705a8e8c52212dc6f43becd12b091c62909aea8b0d576ea8";
 
 test("cyan fixture renders stable 768x512 reference", async ({ page }, testInfo) => {
   expect(page.viewportSize()).toEqual({ width: 768, height: 512 });

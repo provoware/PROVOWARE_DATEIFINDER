@@ -788,8 +788,9 @@ mod tests {
     use super::{
         canonical_child, canonical_scan_directory, classify, decode_path, encode_path,
         matches_name, normalize_query, register_search_session, scan_directory,
-        should_emit_progress, validate_export_lines, validate_file_types, validate_query, MatchMode,
-        ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
+        should_emit_progress, validate_export_lines, validate_file_types, validate_query,
+        MatchMode, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
+        MAX_QUERY_TOKENS,
     };
     use std::{
         collections::{HashMap, HashSet},
@@ -820,21 +821,9 @@ mod tests {
             &tokens,
             MatchMode::All
         ));
-        assert!(!matches_name(
-            "Urlaub_Berlin.jpg",
-            &tokens,
-            MatchMode::All
-        ));
-        assert!(matches_name(
-            "Urlaub_Berlin.jpg",
-            &tokens,
-            MatchMode::Any
-        ));
-        assert!(!matches_name(
-            "Notiz_Berlin.txt",
-            &tokens,
-            MatchMode::Any
-        ));
+        assert!(!matches_name("Urlaub_Berlin.jpg", &tokens, MatchMode::All));
+        assert!(matches_name("Urlaub_Berlin.jpg", &tokens, MatchMode::Any));
+        assert!(!matches_name("Notiz_Berlin.txt", &tokens, MatchMode::Any));
     }
 
     #[test]
@@ -1010,11 +999,7 @@ mod tests {
         let tokens = normalize_query("urlaub 2025");
         let matches = (0..100_000)
             .filter(|index| {
-                matches_name(
-                    &format!("urlaub_2025_{index}.jpg"),
-                    &tokens,
-                    MatchMode::All,
-                )
+                matches_name(&format!("urlaub_2025_{index}.jpg"), &tokens, MatchMode::All)
             })
             .count();
         assert_eq!(matches, 100_000);
