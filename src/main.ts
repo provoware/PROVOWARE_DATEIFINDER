@@ -75,6 +75,7 @@ interface AppState {
   sourcePath: string | null;
   sourcePathKey: string | null;
   sourceLabel: string;
+  lastSearchStatus: "not-started" | "finished" | "cancelled" | "failed";
   results: FileEntry[];
   selectedIds: Set<string>;
   previewId: string | null;
@@ -97,6 +98,7 @@ const initialState: AppState = {
   sourcePath: null,
   sourcePathKey: null,
   sourceLabel: "Ordner wählen",
+  lastSearchStatus: "not-started",
   results: [],
   selectedIds: new Set(),
   previewId: null,
@@ -331,6 +333,9 @@ const ui = {
   resultCount: byId<HTMLElement>("result-count"),
   resultLimitNotice: byId<HTMLElement>("result-limit-notice"),
   empty: byId<HTMLElement>("empty-state"),
+  emptyTitle: byId<HTMLElement>("empty-title"),
+  emptyDetail: byId<HTMLElement>("empty-detail"),
+  emptyAction: byId<HTMLButtonElement>("empty-action"),
   statusTitle: byId<HTMLElement>("status-title"),
   statusDetail: byId<HTMLElement>("status-detail"),
   statusIcon: byId<HTMLElement>("status-icon"),
@@ -353,6 +358,7 @@ const ui = {
   settingsMatch: byId<HTMLSelectElement>("settings-match-select"),
   searchHelp: byId<HTMLDialogElement>("search-help-dialog"),
   previewName: byId<HTMLElement>("preview-name"),
+  previewVisual: byId<HTMLElement>("preview-visual"),
   previewSummary: byId<HTMLElement>("preview-summary"),
   previewPath: byId<HTMLElement>("preview-path"),
   previewSize: byId<HTMLElement>("preview-size"),
@@ -448,8 +454,11 @@ function selectedFiles(): FileEntry[] {
 function renderPreview(): void {
   const file = currentPreview();
   if (!file) {
+    ui.previewVisual.dataset.kind = "empty";
+    ui.previewVisual.dataset.symbol = "⌕";
+    ui.previewVisual.dataset.caption = "Datei auswählen";
     ui.previewName.textContent = "Keine Datei ausgewählt";
-    ui.previewSummary.textContent = "–";
+    ui.previewSummary.textContent = "Wähle einen Treffer aus, um Dateidetails zu sehen.";
     ui.previewPath.textContent = "–";
     ui.previewSize.textContent = "–";
     ui.previewModified.textContent = "–";
@@ -457,12 +466,42 @@ function renderPreview(): void {
     return;
   }
 
+  const kindName = kindLabels[file.kind as FileKind] ?? "Datei";
+  ui.previewVisual.dataset.kind = file.kind;
+  ui.previewVisual.dataset.symbol = file.kind === "image" ? "▧"
+    : file.kind === "audio" ? "♫"
+      : (file.extension || "DAT").slice(0, 5).toUpperCase();
+  ui.previewVisual.dataset.caption = kindName;
   ui.previewName.textContent = file.displayName;
-  ui.previewSummary.textContent = `${file.kind} · ${formatBytes(file.sizeBytes)}`;
+  ui.previewSummary.textContent = `${kindName} · ${formatBytes(file.sizeBytes)}`;
   ui.previewPath.textContent = file.path;
   ui.previewSize.textContent = formatBytes(file.sizeBytes);
   ui.previewModified.textContent = formatDate(file.modifiedAt);
   ui.previewKind.textContent = file.extension ? file.extension.toUpperCase() : file.kind;
+}
+
+function renderEmptyState(): void {
+  if (!state.sourcePathKey) {
+    ui.emptyTitle.textContent = "Noch kein Suchort gewählt.";
+    ui.emptyDetail.textContent = "Wähle zuerst einen Ordner aus, den du durchsuchen möchtest.";
+    ui.emptyAction.textContent = "📁 Ordner wählen";
+  } else if (state.lastSearchStatus === "finished") {
+    ui.emptyTitle.textContent = "Keine passenden Dateien gefunden.";
+    ui.emptyDetail.textContent = "Versuche andere Suchwörter oder lockere die Dateitypfilter.";
+    ui.emptyAction.textContent = "⌕ Suchbegriff ändern";
+  } else if (state.lastSearchStatus === "cancelled") {
+    ui.emptyTitle.textContent = "Suche abgebrochen.";
+    ui.emptyDetail.textContent = "Starte mit einem neuen Suchbegriff, wenn du weitersuchen möchtest.";
+    ui.emptyAction.textContent = "⌕ Erneut suchen";
+  } else if (state.lastSearchStatus === "failed") {
+    ui.emptyTitle.textContent = "Suche konnte nicht abgeschlossen werden.";
+    ui.emptyDetail.textContent = "Prüfe den Hinweis unten und versuche es erneut.";
+    ui.emptyAction.textContent = "⌕ Suchbegriff prüfen";
+  } else {
+    ui.emptyTitle.textContent = "Suchort bereit: " + state.sourceLabel;
+    ui.emptyDetail.textContent = "Gib oben einen oder mehrere Suchbegriffe ein und starte die Suche.";
+    ui.emptyAction.textContent = "⌕ Suchbegriff eingeben";
+  }
 }
 
 function resultRowHeight(): number {
@@ -591,6 +630,7 @@ function renderResults(): void {
   ui.results.setAttribute("aria-busy", String(state.searching));
   ui.resultLimitNotice.hidden = !state.limitReached;
   ui.empty.hidden = state.results.length > 0 || state.searching;
+  renderEmptyState();
   const selected = selectedFiles();
   const selectionText = selected.length === 0
     ? "Keine Datei ausgewählt."
@@ -643,9 +683,22 @@ function focusSourcePicker(): void {
 
 async function chooseSource(): Promise<void> {
   try {
+    if (state.searching) {
+      setStatus("Suche läuft", "Bitte laufende Suche zuerst abbrechen, bevor du den Suchordner wechselst.", "warning");
+      return;
+    }
     if (state.platform.canPickFolder) {
       const root = await pickDirectory();
       if (!root) return;
+      state.results = [];
+      state.selectedIds.clear();
+      state.previewId = null;
+      state.scannedCount = 0;
+      state.elapsedMs = 0;
+      state.skippedCount = 0;
+      state.limitReached = false;
+      state.lastSearchStatus = "not-started";
+      ui.results.scrollTop = 0;
       state.sourcePath = root.path;
       state.sourcePathKey = root.pathKey;
       state.sourceLabel = root.path.split(/[\\/]/).filter(Boolean).at(-1) ?? root.path;
@@ -693,6 +746,7 @@ async function runSearch(): Promise<void> {
   state.elapsedMs = 0;
   state.skippedCount = 0;
   state.limitReached = false;
+  state.lastSearchStatus = "not-started";
   ui.results.scrollTop = 0;
   state.searching = true;
   startProgressTimer();
@@ -716,6 +770,7 @@ async function runSearch(): Promise<void> {
     stopProgressTimer();
     state.searching = false;
     state.activeSessionId = null;
+    state.lastSearchStatus = "failed";
     setStatus("Suche konnte nicht starten", safeMessage(error), "error");
     render();
   }
@@ -767,6 +822,7 @@ async function initialize(): Promise<void> {
       state.elapsedMs = payload.durationMs;
       state.skippedCount = payload.skippedCount;
       state.limitReached = payload.limitReached;
+      state.lastSearchStatus = "finished";
       const skipped = payload.skippedCount > 0 ? ` · ${payload.skippedCount} übersprungen` : "";
       if (payload.limitReached) {
         ui.resultLimitNotice.textContent =
@@ -789,6 +845,7 @@ async function initialize(): Promise<void> {
       state.searching = false;
       stopProgressTimer();
       state.activeSessionId = null;
+      state.lastSearchStatus = "cancelled";
       setStatus("Suche abgebrochen", `${state.results.length} bisherige Treffer bleiben sichtbar.`);
       render();
     },
@@ -801,6 +858,10 @@ async function initialize(): Promise<void> {
 
   ui.sourceNav.addEventListener("click", chooseSource);
   ui.mobileSource.addEventListener("click", chooseSource);
+  ui.emptyAction.addEventListener("click", () => {
+    if (!state.sourcePathKey) void chooseSource();
+    else ui.query.focus();
+  });
   byId<HTMLButtonElement>("search-help-button").addEventListener("click", () => ui.searchHelp.showModal());
   ui.form.addEventListener("submit", (event) => {
     event.preventDefault();

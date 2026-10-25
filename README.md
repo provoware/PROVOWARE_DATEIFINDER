@@ -33,6 +33,8 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ Einstellungen im Dashboard-Header für Farbschema und Suchwort-Vorgabe
 - ✅ dezente Farbtönung der Ergebniszeilen für Bilder, Dokumente, Audio und sonstige Dateien
 - ✅ Startprüfung für belegten Vite-Port 1420 mit sicherer Zuordnung statt blindem Prozessabbruch
+- ✅ adaptives Großbildschirm-Layout mit breiterer Navigation, lesbareren Bedienelementen und informativeren Leerzuständen
+- ✅ Datei-Details mit großem Dateitypsymbol statt einer irreführenden statischen Vorschaugrafik auf breiten Bildschirmen
 
 ## Schnellstart
 
@@ -107,6 +109,15 @@ Die UI kennt nur **Fähigkeiten und Ports**, nicht Windows/Android/iOS-Sonderfä
 4. Während der Suche zeigt der Ergebnisbereich geprüfte Einträge, Trefferzahl, Laufzeit und Einträge pro Sekunde. Weil die Gesamtzahl vorab unbekannt ist, läuft der Balken ohne Prozentversprechen.
 
 Das Fenster lässt sich verkleinern und vergrößern. Große Trefferlisten erweitern nicht das Fenster, sondern scrollen innerhalb des Ergebnisbereichs. Über das Zahnrad im Header lassen sich Farbschema und Standard-Suchmodus einstellen.
+
+Ab einer Fensterbreite von 1200 CSS-Pixeln wachsen Navigation, Schrift,
+Suchbedienelemente und Dateidetails kontrolliert mit. Wenn noch keine Treffer
+existieren, erklärt die Mitte den nächsten sinnvollen Schritt: Ordner wählen,
+Suchbegriff eingeben oder bei null Treffern die Filter anpassen. Die
+Detailkarte zeigt Dateityp, Größe, Datum und Pfad; sie verspricht bewusst
+keine Inhaltsvorschau. Ein neu gewählter Suchordner setzt die bisherigen
+Treffer zurück, damit alte Ergebnisse nicht als Treffer des neuen Ordners
+erscheinen. Die kompakte 768×512-Ausgangsansicht bleibt erhalten.
 
 Die Trefferliste markiert Bilder dezent cyanblau, Dokumente rosarot,
 Audio violett und sonstige Dateien grünlich. Die Dateinamen bleiben gut

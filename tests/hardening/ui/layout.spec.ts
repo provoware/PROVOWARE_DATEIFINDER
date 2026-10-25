@@ -163,6 +163,73 @@ test("file kinds have subtle distinct row colors in all four themes", async ({ p
   }
 });
 
+test("empty state reflects the chosen folder and offers a helpful next action", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installSearchAdapter(page, { itemCount: 0 });
+  await page.goto("/");
+  await expect(page.locator("#empty-title")).toHaveText("Noch kein Suchort gewählt.");
+  await page.locator("#empty-action").click();
+  await expect(page.locator("#source-label")).toHaveText("Dokumente");
+  await expect(page.locator("#empty-title")).toHaveText("Suchort bereit: Dokumente");
+  await page.locator("#empty-action").click();
+  await expect(page.locator("#query-input")).toBeFocused();
+  await page.locator("#query-input").fill("ein-nicht-vorhandener-begriff");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("0 Dateien gefunden");
+  await expect(page.locator("#empty-title")).toHaveText("Keine passenden Dateien gefunden.");
+  await expect(page.locator("#empty-detail")).toContainText("Dateitypfilter");
+});
+
+test("changing the folder resets stale results and visual preview details", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installSearchAdapter(page, { kinds: ["image"] });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator(".result-row")).toHaveCount(1);
+  await page.locator(".result-row").click();
+  await expect(page.locator("#preview-visual")).toHaveAttribute("data-kind", "image");
+  await expect(page.locator("#preview-visual")).toHaveAttribute("data-caption", "Bilder");
+  await expect(page.locator("#preview-summary")).toContainText("Bilder");
+  await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+  await page.locator("#choose-source-nav").click();
+  await expect(page.locator(".result-row")).toHaveCount(0);
+  await expect(page.locator("#empty-title")).toContainText("Suchort bereit");
+  await expect(page.locator("#preview-visual")).toHaveAttribute("data-kind", "empty");
+});
+
+test("large desktop layouts scale navigation, typography and preview without overflowing", async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    for (const theme of themes) {
+      await page.locator("#theme-select").selectOption(theme);
+      const geometry = await page.evaluate(() => {
+        const sidebar = document.querySelector<HTMLElement>(".sidebar")!;
+        const preview = document.querySelector<HTMLElement>(".preview-panel")!;
+        const title = document.querySelector<HTMLElement>(".topbar h1")!;
+        const search = document.querySelector<HTMLElement>("#query-input")!;
+        const emptyButton = document.querySelector<HTMLElement>("#empty-action")!;
+        return {
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          sidebar: sidebar.getBoundingClientRect().width,
+          preview: preview.getBoundingClientRect().width,
+          titleFont: Number.parseFloat(getComputedStyle(title).fontSize),
+          searchFont: Number.parseFloat(getComputedStyle(search).fontSize),
+          emptyButtonVisible: emptyButton.getBoundingClientRect().width > 0,
+        };
+      });
+      expect(geometry.overflow, `${viewport.width}px, ${theme}`).toBeLessThanOrEqual(0);
+      expect(geometry.sidebar).toBeGreaterThanOrEqual(185);
+      expect(geometry.preview).toBeGreaterThanOrEqual(315);
+      expect(geometry.titleFont).toBeGreaterThanOrEqual(27);
+      expect(geometry.searchFont).toBeGreaterThanOrEqual(14);
+      expect(geometry.emptyButtonVisible).toBe(true);
+    }
+  }
+});
+
 test("file types and any-word matching are forwarded before the scan", async ({ page }) => {
   await installSearchAdapter(page);
   await page.goto("/");
