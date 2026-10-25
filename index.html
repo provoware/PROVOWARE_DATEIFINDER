@@ -79,13 +79,19 @@
               <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
               <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary result-limit-notice" aria-busy="false"></div>
               <p id="selection-summary" class="sr-only" aria-live="polite" aria-atomic="true">Keine Datei ausgewählt.</p>
-              <div id="empty-state" class="empty-state"><strong>Noch kein Suchort gewählt.</strong><span>Wähle links unter „Orte“ zuerst einen Ordner.</span></div>
+              <div id="empty-state" class="empty-state">
+                <span class="empty-illustration" aria-hidden="true">⌕</span>
+                <strong id="empty-title">Noch kein Suchort gewählt.</strong>
+                <span id="empty-detail">Wähle links unter „Orte“ zuerst einen Ordner.</span>
+                <p class="empty-guide">1. Ordner auswählen <span aria-hidden="true">·</span> 2. Suchwörter eingeben <span aria-hidden="true">·</span> 3. Treffer prüfen</p>
+                <button id="empty-action" class="primary-button empty-action" type="button">📁 Ordner wählen</button>
+              </div>
             </section>
           </div>
 
           <aside class="panel preview-panel" aria-labelledby="preview-title">
             <div class="panel-heading"><h2 id="preview-title"><span class="accent-dot"></span> Vorschau</h2></div>
-            <div id="preview-visual" class="preview-visual" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
+            <div id="preview-visual" class="preview-visual" data-kind="empty" data-symbol="⌕" data-caption="Datei auswählen" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
             <div id="preview-content" class="preview-content"><strong id="preview-name">Keine Datei ausgewählt</strong><span id="preview-summary">–</span><dl><div><dt>Pfad:</dt><dd id="preview-path">–</dd></div><div><dt>Größe:</dt><dd id="preview-size">–</dd></div><div><dt>Geändert:</dt><dd id="preview-modified">–</dd></div><div><dt>Typ:</dt><dd id="preview-kind">–</dd></div></dl></div>
           </aside>
         </section>
