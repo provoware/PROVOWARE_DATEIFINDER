@@ -46,6 +46,19 @@ Eine neue Referenz darf nicht automatisch akzeptiert werden, nur damit CI wieder
 
 ## Abnahme
 
+### Bewusste Referenzanpassung – flexible Suche
+
+Die neue Suchmaske mit Dateityp-Schaltern, Verknüpfung mehrerer Suchbegriffe,
+Statuskennzahlen und Einstellungszugang verändert die statische Darstellung
+absichtlich. Der GitHub-CI-Lauf `40192458583` hat bei 768×512 folgende
+neuen SHA-256-Prüfsummen der PNG-Aufnahmen gemessen:
+
+- DateiFinder: `1d4e722121803ad4d25255b1b5782e385d4a61f70fee3c0455bc318ed654b57d`
+- Cyan-Fixture (gemeinsames Stylesheet): `fd51974e4954b9f6705a8e8c52212dc6f43becd12b091c62909aea8b0d576ea8`
+
+Die Prüfsummen sind zur geänderten Oberfläche versioniert; die vollständige
+Browser- und Layoutabnahme bleibt ein eigenständiges Pflicht-Gate.
+
 Eine visuelle Änderung gilt erst als freigegeben, wenn:
 
 1. die 768×512-Darstellung bewusst geprüft wurde,

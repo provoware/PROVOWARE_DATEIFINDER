@@ -70,8 +70,17 @@ test("file actions use lossless path keys instead of display paths", () => {
 
 test("search progress is independent of match branch", () => {
   const progressIndex = rust.indexOf("should_emit_progress(scanned_count, last_progress)");
-  const matchIndex = rust.indexOf("if !matches_name(&name, tokens)");
+  const matchIndex = rust.indexOf("if !matches_name(&name, filters.tokens, filters.match_mode)");
   assert.ok(progressIndex > 0 && matchIndex > 0 && progressIndex < matchIndex);
+});
+
+test("file type and word-mode filtering is bounded before metadata is read", () => {
+  assert.match(rust, /validate_file_types\(&request\.file_types\)\?/u);
+  assert.match(rust, /types\.len\(\) > 4/u);
+  assert.match(rust, /MatchMode::Any => tokens\.iter\(\)\.any/u);
+  const typeFilter = rust.indexOf("!filters.file_types.is_empty() && !filters.file_types.contains(classify(&extension))");
+  const metadata = rust.indexOf("let metadata = match entry.metadata()");
+  assert.ok(typeFilter > 0 && metadata > typeFilter, "file type filter must run before file metadata");
 });
 
 test("cancellation flushes pending batch before cancelled event", () => {
@@ -122,9 +131,12 @@ test("accessibility contracts remain enabled", () => {
   assert.match(css, /\.nav-item small \{[\s\S]*?font-size:\s*11px/u);
 });
 
-test("desktop minimum reference window remains 768x512", () => {
+test("desktop opens at the reference size but can resize to a smaller safe minimum", () => {
   const config = JSON.parse(tauriConfig);
   const main = config.app.windows.find((window) => window.label === "main");
-  assert.equal(main.minWidth, 768);
-  assert.equal(main.minHeight, 512);
+  assert.equal(main.width, 768);
+  assert.equal(main.height, 512);
+  assert.equal(main.minWidth, 620);
+  assert.equal(main.minHeight, 420);
+  assert.equal(main.resizable, true);
 });
