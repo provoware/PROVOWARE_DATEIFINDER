@@ -2,15 +2,40 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const [frontend, rust, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
+const [frontend, rust, fileActions, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
   readFile("src/main.ts", "utf8"),
   readFile("src-tauri/src/lib.rs", "utf8"),
+  readFile("src-tauri/src/file_actions.rs", "utf8"),
   readFile("src/styles.css", "utf8"),
   readFile("src-tauri/tauri.conf.json", "utf8"),
   readFile(".github/workflows/quality.yml", "utf8"),
   readFile(".github/workflows/autonomous-hardening.yml", "utf8"),
   readFile(".github/dependabot.yml", "utf8"),
 ]);
+
+test("copy, move and ZIP operate only on selected permission-checked path keys", () => {
+  assert.match(frontend, /pathKeys:\s*files\.map\(\(file\) => file\.pathKey\)/u);
+  assert.match(rust, /async fn execute_file_action\(/u);
+  assert.match(rust, /validated_allowed_file\(&allowed_roots, &request\.root_path_key, key\)/u);
+  assert.match(fileActions, /MAX_ACTION_FILES:\s*usize\s*=\s*100/u);
+  assert.match(fileActions, /MAX_ACTION_BYTES:\s*u64\s*=\s*8 \* 1024 \* 1024 \* 1024/u);
+  assert.match(fileActions, /path\.starts_with\(&canonical_root\)/u);
+});
+
+test("file writes use exclusive temporary files, post-checks and cancellation", () => {
+  assert.match(fileActions, /\.create_new\(true\)/u);
+  assert.match(fileActions, /struct CleanupPath/u);
+  assert.match(fileActions, /impl Drop for CleanupPath/u);
+  assert.match(fileActions, /compare_contents\(source, staged, cancel\)/u);
+  assert.match(fileActions, /compare_contents\(source, destination, cancel\)/u);
+  assert.match(fileActions, /same_file_identity\(source_metadata, &current\)/u);
+  assert.match(fileActions, /fn commit_without_overwrite\(/u);
+  assert.match(fileActions, /fs::hard_link\(staged, destination\)/u);
+  assert.match(fileActions, /fs::remove_file\(source\)/u);
+  assert.match(fileActions, /wait_for_zip\(child, cancel\)/u);
+  assert.match(fileActions, /\.arg\("-T"\)/u);
+  assert.match(rust, /fn cancel_file_action\(/u);
+});
 
 test("frontend capability fallback is fail-closed", () => {
   const fallback = frontend.match(/platform:\s*\{([\s\S]*?)\n\s*\},\n\};/u)?.[1] ?? "";
@@ -70,8 +95,34 @@ test("file actions use lossless path keys instead of display paths", () => {
 
 test("search progress is independent of match branch", () => {
   const progressIndex = rust.indexOf("should_emit_progress(scanned_count, last_progress)");
-  const matchIndex = rust.indexOf("if !matches_name(&name, filters.tokens, filters.match_mode)");
+  const matchIndex = rust.indexOf("let name_matches = matches_name(&name, filters.tokens, filters.match_mode)");
   assert.ok(progressIndex > 0 && matchIndex > 0 && progressIndex < matchIndex);
+});
+
+test("optional text search is bounded and text preview honors the source permission", () => {
+  assert.match(rust, /const MAX_TEXT_BYTES:\s*u64\s*=\s*256 \* 1024/u);
+  assert.match(rust, /if metadata\.len\(\) > MAX_TEXT_BYTES \|\| !is_readable_text\(&entry\.path\(\)\)/u);
+  assert.match(rust, /fn bounded_utf8_text\(/u);
+  assert.match(rust, /fn preview_text\([\s\S]*?validated_allowed_file\(&allowed_roots, &root_path_key, &path_key\)/u);
+  assert.match(rust, /search_contents: bool/u);
+});
+
+test("saved folder is inspected without granting access and requires explicit restoration", () => {
+  const inspect = rust.slice(rust.indexOf("fn inspect_saved_root("), rust.indexOf("fn restore_saved_root("));
+  assert.match(inspect, /read_dir\(candidate\)\.is_ok\(\)/u);
+  assert.doesNotMatch(inspect, /roots\.insert/u);
+  const restore = rust.slice(rust.indexOf("fn restore_saved_root("), rust.indexOf("fn start_search("));
+  assert.match(restore, /if !inspect_saved_root\(path\.clone\(\)\)/u);
+  assert.match(restore, /roots\.insert\(canonical\.clone\(\)\)/u);
+  assert.match(frontend, /ui\.returnUse\.addEventListener\("click"/u);
+});
+
+test("template import and export have size bounds and exports never overwrite existing files", () => {
+  const jsonImport = rust.slice(rust.indexOf("async fn import_search_presets("), rust.indexOf("async fn export_search_presets("));
+  const jsonExport = rust.slice(rust.indexOf("async fn export_search_presets("), rust.indexOf("pub fn run()"));
+  assert.match(jsonImport, /metadata\.len\(\) > 64 \* 1024/u);
+  assert.match(jsonImport, /take\(64 \* 1024 \+ 1\)/u);
+  assert.match(jsonExport, /create_new\(true\)/u);
 });
 
 test("file type and word-mode filtering is bounded before metadata is read", () => {

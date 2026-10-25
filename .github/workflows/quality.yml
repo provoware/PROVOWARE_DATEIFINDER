@@ -40,6 +40,9 @@ jobs:
       - name: Start assistant safety and abort contracts
         run: node --test tests/start-contracts.mjs
 
+      - name: Finding statistics aggregation contracts
+        run: node --experimental-strip-types --test tests/findings-insights.test.mjs tests/preferences.test.mjs
+
       - name: TypeScript gate
         run: npm run typecheck
 
@@ -124,6 +127,20 @@ jobs:
 
       - name: Rust format gate
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      # Bei einem Formatfehler entsteht ein reproduzierbarer Vorschlag für den Review.
+      # Der fehlgeschlagene Gate wird dadurch ausdrücklich NICHT grün.
+      - name: Prepare Rust formatting diagnostic
+        if: failure()
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml
+
+      - name: Attach formatted Rust diagnostic
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rustfmt-diagnostic
+          path: src-tauri/src/
+          retention-days: 2
 
       - name: Rust Clippy gate
         run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

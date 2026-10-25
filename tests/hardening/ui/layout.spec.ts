@@ -4,18 +4,27 @@ const themes = ["cyan", "purple", "green", "orange"] as const;
 
 async function installSearchAdapter(
   page: import("@playwright/test").Page,
-  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[] } = {},
+  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[]; sizes?: number[]; modifiedTimes?: (number | null)[]; names?: string[]; extensions?: string[]; previewContent?: string; actionDelayMs?: number } = {},
 ) {
   await page.addInitScript((testOptions) => {
     const {
       listenerFailure = false,
       itemCount = 1,
       kinds = [],
+      sizes = [],
+      modifiedTimes = [],
+      names = [],
+      extensions = [],
+      previewContent = "Beispieltext",
       limitReached = false,
       reportedResultCount = itemCount,
+      actionDelayMs = 0,
     } = testOptions;
     const runtime = window as typeof window & {
       __lastSearchRequest?: unknown;
+      __lastFileActionRequest?: unknown;
+      __cancelledAction?: string;
+      __fileActionProgress?: (payload: { sessionId: string; completed: number; total: number; phase: string }) => void;
       __searchListeners?: {
         onBatch(payload: unknown): void;
         onProgress(payload: unknown): void;
@@ -37,6 +46,9 @@ async function installSearchAdapter(
       async pickDirectory() {
         return { path: "/test/Dokumente", pathKey: "test-root" };
       },
+      async previewText() {
+        return previewContent;
+      },
       async listenSearchEvents(listeners) {
         if (listenerFailure) throw new Error("listener registration failed");
         runtime.__searchListeners = listeners;
@@ -46,14 +58,14 @@ async function installSearchAdapter(
         runtime.__lastSearchRequest = request;
         const items = Array.from({ length: itemCount }, (_, index) => ({
           id: `invoice-${index}`,
-          displayName: index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`,
+          displayName: names[index] ?? (index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`),
           path: index === 0
             ? "/test/Dokumente/rechnung-2025.pdf"
             : `/test/Dokumente/rechnung-2025-${index}.pdf`,
           pathKey: `invoice-key-${index}`,
-          extension: "pdf",
-          sizeBytes: 2048 + index,
-          modifiedAt: 1_735_689_600_000 + index,
+          extension: extensions[index] ?? "pdf",
+          sizeBytes: sizes[index] ?? 2048 + index,
+          modifiedAt: modifiedTimes[index] === undefined ? 1_735_689_600_000 + index : modifiedTimes[index],
           kind: kinds[index] ?? "document",
         }));
         runtime.__searchListeners?.onBatch({
@@ -73,6 +85,19 @@ async function installSearchAdapter(
         });
       },
       async cancelSearch() {},
+      async listenFileActionProgress(callback) {
+        runtime.__fileActionProgress = callback;
+        return () => {};
+      },
+      async executeFileAction(request) {
+        runtime.__lastFileActionRequest = request;
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: 0, total: request.pathKeys.length, phase: "Vorprüfung" });
+        if (actionDelayMs) await new Promise((resolve) => setTimeout(resolve, actionDelayMs));
+        if (runtime.__cancelledAction === request.sessionId) throw new Error("Dateiaktion wurde abgebrochen.");
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: request.pathKeys.length, total: request.pathKeys.length, phase: "Dateien geprüft" });
+        return { completed: request.pathKeys.length, destination: "/test/Ziel" };
+      },
+      async cancelFileAction(sessionId) { runtime.__cancelledAction = sessionId; },
     };
   }, options);
 }
@@ -114,6 +139,59 @@ test("result selection keeps keyboard focus and exposes a concise selection summ
   await expect(page.locator("#selection-summary")).toHaveText("1 Datei ausgewählt.");
   await expect(page.locator(".row-check")).toHaveAttribute("aria-hidden", "true");
   await expect(page.locator(".file-icon")).toHaveAttribute("aria-hidden", "true");
+});
+
+for (const action of ["copy", "move", "zip"] as const) {
+  test(`${action} offers a safe target-dialog workflow with lossless path keys`, async ({ page }) => {
+    await installSearchAdapter(page);
+    await page.goto("/");
+    await expect(page.locator("#file-action-toolbar")).toBeHidden();
+    await page.locator("#choose-source-nav").click();
+    await page.locator("#query-input").fill("rechnung");
+    await page.locator("#search-button").click();
+    await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+    await page.locator(".result-row").click();
+    await expect(page.locator("#file-action-toolbar")).toBeVisible();
+    await page.locator(`#action-${action}`).click();
+    await expect(page.locator("#file-action-dialog")).toBeVisible();
+    await page.locator("#file-action-create-folder").check();
+    await page.locator("#file-action-folder-name").fill("Archiv 2026");
+    if (action === "zip") {
+      await page.locator("#file-action-archive-name").fill("auswahl.zip");
+    }
+    await page.locator("#file-action-start").click();
+    await expect(page.locator("#file-action-feedback")).toContainText("erfolgreich geprüft und gespeichert");
+    const request = await page.evaluate(() => (window as typeof window & {
+      __lastFileActionRequest?: Record<string, unknown>;
+    }).__lastFileActionRequest);
+    expect(request).toMatchObject({
+      action,
+      rootPathKey: "test-root",
+      pathKeys: ["invoice-key-0"],
+      newFolderName: "Archiv 2026",
+      archiveName: action === "zip" ? "auswahl.zip" : null,
+    });
+    await expect(page.locator("#file-action-cancel")).toHaveText("Schließen");
+    if (action === "move") await expect(page.locator(".result-row")).toHaveCount(0);
+  });
+}
+
+test("in-progress file operation can be cancelled without closing the safety dialog", async ({ page }) => {
+  await installSearchAdapter(page, { actionDelayMs: 500 });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
+  await page.locator(".result-row").click();
+  await page.locator("#action-copy").click();
+  await page.locator("#file-action-start").click();
+  await expect(page.locator("#file-action-cancel")).toHaveText("■ Abbrechen");
+  await page.locator("#file-action-cancel").click();
+  await expect(page.locator("#file-action-dialog")).toBeVisible();
+  await expect(page.locator("#file-action-feedback")).toContainText("abgebrochen");
+  const cancelledId = await page.evaluate(() => (window as typeof window & { __cancelledAction?: string }).__cancelledAction);
+  expect(cancelledId).toMatch(/[0-9a-f-]{36}/);
 });
 
 test("large result sets render only the visible virtual window", async ({ page }) => {
@@ -161,6 +239,89 @@ test("file kinds have subtle distinct row colors in all four themes", async ({ p
     expect(new Set(values.map((value) => value.tint)).size).toBe(4);
     expect(values.every((value) => value.background.includes("linear-gradient"))).toBe(true);
   }
+});
+
+test("large-screen finding graphic shows live colored counts for type, year and size", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installSearchAdapter(page, {
+    itemCount: 6,
+    kinds: ["image", "image", "document", "audio", "text", "document"],
+    sizes: [0, 250, 1024 * 1024, 3 * 1024 * 1024, 50 * 1024 * 1024, 1024 * 1024 * 1024],
+    modifiedTimes: [Date.UTC(2026, 1, 1), Date.UTC(2026, 1, 1), Date.UTC(2025, 1, 1), null, Date.UTC(2024, 1, 1), Date.UTC(2025, 1, 1)],
+  });
+  await page.goto("/");
+  await expect(page.locator("#insights-toggle")).toBeHidden();
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+
+  await expect(page.locator("#insights-panel")).toBeVisible();
+  await expect(page.locator("#insights-toggle")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#insights-total")).toContainText("Zwischenstand: 6");
+  await expect(page.locator("#status-title")).toHaveText("6 Dateien gefunden");
+  await expect(page.locator("#insights-total")).toContainText("Angezeigt: 6");
+  await expect(page.locator("#insights-legend li")).toHaveCount(4);
+  await expect(page.locator("#insights-legend")).toContainText("Bilder 2");
+  await expect(page.locator("#insights-legend")).toContainText("Dokumente 2");
+  await expect(page.locator("#insights-legend")).toContainText("Audio 1");
+  await expect(page.locator("#insights-legend")).toContainText("Sonstige 1");
+  const colors = await page.locator(".insights-chart-segment").evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundColor));
+  expect(new Set(colors).size).toBe(4);
+
+  await page.locator("#insights-mode").selectOption("year");
+  await expect(page.locator("#insights-legend")).toContainText("2026 2");
+  await expect(page.locator("#insights-legend")).toContainText("2025 2");
+  await expect(page.locator("#insights-legend")).toContainText("2024 1");
+  await expect(page.locator("#insights-legend")).toContainText("Ohne Datum 1");
+
+  await page.locator("#insights-mode").selectOption("size");
+  await expect(page.locator("#insights-legend")).toContainText("0 Byte 1");
+  await expect(page.locator("#insights-legend")).toContainText("Unter 1 MB 1");
+  await expect(page.locator("#insights-legend")).toContainText("1–10 MB 2");
+  await expect(page.locator("#insights-legend")).toContainText("10–100 MB 1");
+  await expect(page.locator("#insights-legend")).toContainText("Ab 1 GB 1");
+  const chartDescription = await page.locator("#insights-chart").getAttribute("aria-label");
+  expect(chartDescription).toContain("6 angezeigte Treffer");
+});
+
+test("optional text-content search is explicit and preview renders harmless text", async ({ page }) => {
+  await installSearchAdapter(page, { itemCount: 1, kinds: ["text"], names: ["gedanken.txt"], extensions: ["txt"], previewContent: "Hallo aus der Textdatei\n<script>harmlos</script>" });
+  await page.goto("/");
+  await page.locator("#settings-button").click();
+  await page.locator("#settings-content-search").check();
+  await page.keyboard.press("Escape");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("hallo");
+  await page.locator("#search-button").click();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __lastSearchRequest?: { searchContents: boolean } }).__lastSearchRequest?.searchContents)).toBe(true);
+  await page.locator(".result-row").click();
+  await expect(page.locator("#text-preview")).toBeVisible();
+  await expect(page.locator("#text-preview")).toContainText("Hallo aus der Textdatei");
+  await expect(page.locator("#text-preview")).toContainText("<script>harmlos</script>");
+  await expect(page.locator("#preview-visual")).toBeHidden();
+  expect(await page.locator("#text-preview script").count()).toBe(0);
+});
+
+test("compact finding graphic is optional and never changes list scroll height", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 420 });
+  await installSearchAdapter(page, { itemCount: 500 });
+  await page.goto("/");
+  await page.locator("#mobile-source-button").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#insights-toggle")).toBeVisible();
+  await expect(page.locator("#insights-panel")).toBeHidden();
+  const before = await page.locator("#results-list").evaluate((node) => node.clientHeight);
+  await page.locator("#insights-toggle").click();
+  await expect(page.locator("#insights-panel")).toBeVisible();
+  const after = await page.locator("#results-list").evaluate((node) => node.clientHeight);
+  expect(after).toBe(before);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.locator("#insights-mode").selectOption("year");
+  await expect(page.locator("#insights-legend")).toContainText("2025");
+  await page.locator("#insights-toggle").click();
+  await expect(page.locator("#insights-panel")).toBeHidden();
+  expect(await page.locator("#results-list").evaluate((node) => node.clientHeight)).toBe(before);
 });
 
 test("empty state reflects the chosen folder and offers a helpful next action", async ({ page }) => {
