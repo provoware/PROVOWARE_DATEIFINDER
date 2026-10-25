@@ -458,7 +458,8 @@ where
                 .extension()
                 .map(|value| value.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            if !filters.file_types.is_empty() && !filters.file_types.contains(classify(&extension)) {
+            if !filters.file_types.is_empty() && !filters.file_types.contains(classify(&extension))
+            {
                 continue;
             }
 
