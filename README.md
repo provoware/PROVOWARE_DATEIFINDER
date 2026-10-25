@@ -26,6 +26,11 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ Scanner prüft eingereihte Ordner vor Zugriff erneut gegen den freigegebenen Suchort
 - ✅ vollständige Hardening-Suite inklusive 5.000-Treffer-, 200-%- und Golden-Prüfung
 - ✅ wöchentliche Abhängigkeitsüberwachung für npm, Cargo und GitHub-Actions
+- ✅ flexible Fenstergröße (Start 768×512, Mindestgröße 620×420) und intern scrollbar begrenzte Trefferliste
+- ✅ vor der Suche kombinierbare Dateitypfilter für Bilder, Dokumente, Audio und Sonstige
+- ✅ Mehrwortsuche mit „alle Wörter“ oder „mindestens eines“
+- ✅ live sichtbare Prüfzahlen, Treffer, Laufzeit und Suchgeschwindigkeit (Fortschritt ohne erfundene Prozentzahl)
+- ✅ Einstellungen im Dashboard-Header für Farbschema und Suchwort-Vorgabe
 
 ## Schnellstart
 
@@ -81,6 +86,15 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ## Architektur in einem Satz
 
 Die UI kennt nur **Fähigkeiten und Ports**, nicht Windows/Android/iOS-Sonderfälle. Desktop durchsucht freigegebene Ordner über Rust; Mobile erhält eigene Quellenadapter hinter derselben Schnittstelle.
+
+## Suche und Fenstergröße
+
+1. Suchordner wählen und mehrere Wörter eingeben (z. B. `rechnung 2025`).
+2. Wahlweise **alle Wörter** oder **mindestens eines** verlangen.
+3. Vor dem Start **Dateitypen** anklicken. Mehrere Gruppen lassen sich kombinieren; **Alle** hebt die Eingrenzung auf.
+4. Während der Suche zeigt der Ergebnisbereich geprüfte Einträge, Trefferzahl, Laufzeit und Einträge pro Sekunde. Weil die Gesamtzahl vorab unbekannt ist, läuft der Balken ohne Prozentversprechen.
+
+Das Fenster lässt sich verkleinern und vergrößern. Große Trefferlisten erweitern nicht das Fenster, sondern scrollen innerhalb des Ergebnisbereichs. Über das Zahnrad im Header lassen sich Farbschema und Standard-Suchmodus einstellen.
 
 Siehe:
 

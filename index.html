@@ -17,10 +17,10 @@
         <nav class="nav-list">
           <button class="nav-item is-active" type="button" aria-current="page"><span class="nav-icon">⌕</span><span><strong>Suche</strong><small>Dateien finden</small></span></button>
           <button id="choose-source-nav" class="nav-item" type="button"><span class="nav-icon">📁</span><span><strong>Orte</strong><small id="source-label">Ordner wählen</small></span></button>
-          <button class="nav-item" type="button" disabled><span class="nav-icon">📄</span><span><strong>Dateitypen</strong><small>folgt in V0.2</small></span></button>
+          <button id="nav-file-types" class="nav-item" type="button"><span class="nav-icon">📄</span><span><strong>Dateitypen</strong><small>Suche eingrenzen</small></span></button>
           <button class="nav-item" type="button" disabled><span class="nav-icon">★</span><span><strong>Favoriten</strong><small>folgt in V0.2</small></span></button>
           <button class="nav-item" type="button" disabled><span class="nav-icon">◷</span><span><strong>Verlauf</strong><small>folgt in V0.2</small></span></button>
-          <button class="nav-item" type="button" disabled><span class="nav-icon">⚙</span><span><strong>Einstellungen</strong><small>folgt in V0.2</small></span></button>
+          <button id="nav-settings" class="nav-item" type="button"><span class="nav-icon">⚙</span><span><strong>Einstellungen</strong><small>Anzeige &amp; Suche</small></span></button>
         </nav>
         <p class="sidebar-claim" aria-hidden="true">Deine Dateien.<br />Deine Kontrolle.</p>
       </aside>
@@ -34,6 +34,7 @@
           <div class="topbar-actions">
             <button id="mobile-source-button" class="window-button mobile-only" type="button" aria-label="Suchquelle wählen" title="Suchquelle wählen">📁</button>
             <label class="theme-picker"><span class="sr-only">Farbschema</span><select id="theme-select" aria-label="Farbschema"><option value="cyan">Cyan</option><option value="purple">Violett</option><option value="green">Grün</option><option value="orange">Orange</option></select></label>
+            <button id="settings-button" class="window-button settings-button" type="button" aria-label="Einstellungen öffnen" title="Einstellungen öffnen" aria-haspopup="dialog">⚙</button>
             <button id="window-minimize" class="window-button desktop-only" type="button" aria-label="Fenster minimieren">−</button>
             <button id="window-maximize" class="window-button desktop-only" type="button" aria-label="Fenster maximieren">□</button>
             <button id="window-close" class="window-button desktop-only" type="button" aria-label="Fenster schließen">×</button>
@@ -48,7 +49,19 @@
                 <label class="search-box"><span class="search-symbol" aria-hidden="true">⌕</span><input id="query-input" type="search" placeholder="z. B. rechnung 2025" autocomplete="off" spellcheck="false" aria-label="Dateinamen suchen" aria-describedby="query-help" /></label>
                 <button id="search-button" class="primary-button" type="submit">Suchen</button>
               </form>
-              <p id="query-help" class="sr-only">Mehrere Wörter werden gemeinsam gesucht. Jedes eingegebene Wort muss im Dateinamen vorkommen.</p>
+              <p id="query-help" class="sr-only">Mehrere Suchwörter sind erlaubt. Wähle, ob alle oder nur eines der Wörter vorkommen muss.</p>
+              <div class="search-options">
+                <label class="match-picker" for="match-mode-select">Wörter <select id="match-mode-select" aria-label="Verknüpfung der Suchwörter"><option value="all">Alle müssen passen</option><option value="any">Eines reicht</option></select></label>
+                <span class="search-options-note">Dateinamen · Unterordner inklusive</span>
+              </div>
+              <fieldset id="file-type-filter" class="type-filters" aria-label="Dateitypen für die nächste Suche">
+                <legend class="sr-only">Dateitypen auswählen</legend>
+                <button type="button" data-file-type="all" aria-pressed="true">Alle</button>
+                <button type="button" data-file-type="image" aria-pressed="false">Bilder</button>
+                <button type="button" data-file-type="document" aria-pressed="false">Dokumente</button>
+                <button type="button" data-file-type="audio" aria-pressed="false">Audio</button>
+                <button type="button" data-file-type="text" aria-pressed="false">Sonstige</button>
+              </fieldset>
               <div class="chips" aria-label="Suchbeispiele">
                 <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button id="search-help-button" type="button" class="options-chip" aria-haspopup="dialog">? Hilfe</button>
               </div>
@@ -56,6 +69,13 @@
 
             <section class="panel results-panel" aria-labelledby="results-title">
               <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
+              <div class="scan-metrics" aria-label="Suchprozess und Kennzahlen">
+                <span><strong id="metric-scanned">0</strong> geprüft</span>
+                <span><strong id="metric-found">0</strong> Treffer</span>
+                <span><strong id="metric-elapsed">0 s</strong></span>
+                <span><strong id="metric-speed">–</strong> /s</span>
+                <span id="metric-filter" class="metric-filter">Alle Typen</span>
+              </div>
               <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
               <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary result-limit-notice" aria-busy="false"></div>
               <p id="selection-summary" class="sr-only" aria-live="polite" aria-atomic="true">Keine Datei ausgewählt.</p>
@@ -86,8 +106,17 @@
         <li><strong>Wörter eingeben</strong><span>Tippe einen Teil des Dateinamens ein, zum Beispiel <q>rechnung 2025</q>.</span></li>
         <li><strong>Suche starten</strong><span>Klicke auf „Suchen“. Unterordner werden automatisch mit durchsucht.</span></li>
       </ol>
-      <div class="help-note"><strong>Gut zu wissen</strong><span>Bei mehreren Wörtern muss jedes Wort im Dateinamen vorkommen. Groß- und Kleinschreibung spielen keine Rolle.</span></div>
+      <div class="help-note"><strong>Gut zu wissen</strong><span>Du kannst mehrere Wörter mit Leerzeichen eingeben. „Alle“ sucht nach jedem Wort, „Eines reicht“ nach mindestens einem. Groß- und Kleinschreibung spielen keine Rolle. Dateitypfilter gelten bereits während der Suche.</span></div>
       <form method="dialog"><button class="primary-button help-close" type="submit" autofocus>Verstanden</button></form>
+    </dialog>
+    <dialog id="settings-dialog" class="help-dialog settings-dialog" aria-labelledby="settings-title">
+      <div class="help-dialog-heading"><h2 id="settings-title">Einstellungen</h2><p>Persönliche Vorgaben für Anzeige und Suche.</p></div>
+      <div class="settings-fields">
+        <label for="settings-theme-select">Farbschema <select id="settings-theme-select"><option value="cyan">Cyan</option><option value="purple">Violett</option><option value="green">Grün</option><option value="orange">Orange</option></select></label>
+        <label for="settings-match-select">Suchwörter standardmäßig <select id="settings-match-select"><option value="all">Alle müssen passen</option><option value="any">Eines reicht</option></select></label>
+        <p>Die Ergebnisliste bleibt innerhalb des Fensters scrollbar. Bei laufenden Suchen sind Fortschritt und Geschwindigkeit sichtbar; eine genaue Prozentzahl ist ohne vorherige Dateizählung nicht möglich.</p>
+      </div>
+      <form method="dialog"><button class="primary-button help-close" type="submit" autofocus>Schließen</button></form>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

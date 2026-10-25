@@ -14,6 +14,7 @@ async function installSearchAdapter(
       reportedResultCount = itemCount,
     } = testOptions;
     const runtime = window as typeof window & {
+      __lastSearchRequest?: unknown;
       __searchListeners?: {
         onBatch(payload: unknown): void;
         onProgress(payload: unknown): void;
@@ -41,6 +42,7 @@ async function installSearchAdapter(
         return [];
       },
       async startSearch(request) {
+        runtime.__lastSearchRequest = request;
         const items = Array.from({ length: itemCount }, (_, index) => ({
           id: `invoice-${index}`,
           displayName: index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`,
@@ -129,6 +131,71 @@ test("large result sets render only the visible virtual window", async ({ page }
   });
   await expect.poll(async () => page.locator(".result-row").count()).toBeLessThan(40);
   await expect(page.locator(".result-row").last()).toHaveAttribute("aria-label", /Treffer 5000 von 5000$/);
+  await expect(page.locator("#metric-scanned")).toHaveText("5.000");
+  await expect(page.locator("#metric-found")).toHaveText("5.000");
+  const dimensions = await page.locator("#results-list").evaluate((node) => ({
+    viewport: node.clientHeight,
+    total: node.scrollHeight,
+  }));
+  expect(dimensions.viewport).toBeGreaterThan(0);
+  expect(dimensions.total).toBeGreaterThan(dimensions.viewport);
+});
+
+test("file types and any-word matching are forwarded before the scan", async ({ page }) => {
+  await installSearchAdapter(page);
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("urlaub 2025 fotos");
+  await page.locator('[data-file-type="image"]').click();
+  await page.locator('[data-file-type="audio"]').click();
+  await page.locator("#match-mode-select").selectOption("any");
+  await page.locator("#search-button").click();
+
+  const request = await page.evaluate(() => (window as typeof window & { __lastSearchRequest?: unknown }).__lastSearchRequest);
+  expect(request).toMatchObject({
+    query: "urlaub 2025 fotos",
+    matchMode: "any",
+    fileTypes: ["image", "audio"],
+    maxResults: 20_000,
+  });
+  await expect(page.locator("#metric-filter")).toHaveText("Bilder, Audio");
+});
+
+test("header settings open and search preferences can be adjusted", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#settings-button").click();
+  await expect(page.locator("#settings-dialog")).toBeVisible();
+  await page.locator("#settings-match-select").selectOption("any");
+  await expect(page.locator("#match-mode-select")).toHaveValue("any");
+  await page.locator("#settings-theme-select").selectOption("green");
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "green");
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#settings-dialog")).toBeHidden();
+  await expect(page.locator("#settings-button")).toBeFocused();
+});
+
+test("a smaller window scrolls results internally without horizontal growth", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 420 });
+  await installSearchAdapter(page, { itemCount: 5_000 });
+  await page.goto("/");
+  await page.locator("#mobile-source-button").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#result-count")).toContainText("5000");
+
+  const size = await page.evaluate(() => {
+    const list = document.querySelector<HTMLElement>("#results-list")!;
+    const panel = document.querySelector<HTMLElement>(".results-panel")!;
+    return {
+      horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      panelHeight: panel.getBoundingClientRect().height,
+      listHeight: list.clientHeight,
+      scrollHeight: list.scrollHeight,
+    };
+  });
+  expect(size.horizontalOverflow).toBeLessThanOrEqual(0);
+  expect(size.panelHeight).toBeLessThanOrEqual(500);
+  expect(size.scrollHeight).toBeGreaterThan(size.listHeight);
 });
 
 test("result limit is clearly reported as incomplete", async ({ page }) => {
@@ -277,7 +344,7 @@ test("search help explains the existing matcher in plain language", async ({ pag
   await dialog.evaluate((node: HTMLDialogElement) => node.showModal());
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("In drei Schritten");
-  await expect(dialog).toContainText("muss jedes Wort im Dateinamen vorkommen");
+  await expect(dialog).toContainText("mindestens einem");
   await expect(dialog).toContainText("Groß- und Kleinschreibung spielen keine Rolle");
   await expect(dialog.locator(".help-close")).toBeFocused();
 

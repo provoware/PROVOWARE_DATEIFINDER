@@ -35,8 +35,20 @@ pub struct SearchRequest {
     pub session_id: String,
     pub root_path_key: String,
     pub query: String,
+    #[serde(default)]
+    pub match_mode: MatchMode,
+    #[serde(default)]
+    pub file_types: Vec<String>,
     pub batch_size: usize,
     pub max_results: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MatchMode {
+    #[default]
+    All,
+    Any,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -124,12 +136,29 @@ fn validate_query(query: &str) -> Result<Vec<String>, String> {
     Ok(tokens)
 }
 
-fn matches_name(name: &str, tokens: &[String]) -> bool {
+fn matches_name(name: &str, tokens: &[String], mode: MatchMode) -> bool {
     if tokens.is_empty() {
         return true;
     }
     let normalized = name.to_lowercase();
-    tokens.iter().all(|token| normalized.contains(token))
+    match mode {
+        MatchMode::All => tokens.iter().all(|token| normalized.contains(token)),
+        MatchMode::Any => tokens.iter().any(|token| normalized.contains(token)),
+    }
+}
+
+fn validate_file_types(types: &[String]) -> Result<HashSet<String>, String> {
+    if types.len() > 4 {
+        return Err("Zu viele Dateitypfilter ausgewählt.".into());
+    }
+    let mut allowed = HashSet::new();
+    for kind in types {
+        if !matches!(kind.as_str(), "image" | "audio" | "document" | "text") {
+            return Err("Ungültiger Dateitypfilter.".into());
+        }
+        allowed.insert(kind.clone());
+    }
+    Ok(allowed)
 }
 
 fn classify(extension: &str) -> &'static str {
@@ -327,6 +356,8 @@ struct ScanOutcome {
 fn scan_directory<F>(
     root: PathBuf,
     tokens: &[String],
+    match_mode: MatchMode,
+    file_types: &HashSet<String>,
     batch_size: usize,
     max_results: usize,
     cancelled: &AtomicBool,
@@ -416,7 +447,14 @@ where
             }
 
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !matches_name(&name, tokens) {
+            if !matches_name(&name, tokens, match_mode) {
+                continue;
+            }
+            let extension = Path::new(&name)
+                .extension()
+                .map(|value| value.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if !file_types.is_empty() && !file_types.contains(classify(&extension)) {
                 continue;
             }
 
@@ -544,6 +582,8 @@ fn start_search(
     let batch_size = request.batch_size.clamp(10, 500);
     let max_results = request.max_results.clamp(1, 250_000);
     let tokens = validate_query(&request.query)?;
+    let file_types = validate_file_types(&request.file_types)?;
+    let match_mode = request.match_mode;
     let id = request.session_id.trim().to_string();
     if id.is_empty() || id.len() > 128 {
         return Err("Ungültige Suchsitzung.".into());
@@ -567,6 +607,8 @@ fn start_search(
         let outcome = scan_directory(
             canonical_root,
             &tokens,
+            match_mode,
+            &file_types,
             batch_size,
             max_results,
             &cancelled,
@@ -746,11 +788,11 @@ mod tests {
     use super::{
         canonical_child, canonical_scan_directory, classify, decode_path, encode_path,
         matches_name, normalize_query, register_search_session, scan_directory,
-        should_emit_progress, validate_export_lines, validate_query, ScanEvent,
-        MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
+        should_emit_progress, validate_export_lines, validate_file_types, validate_query, MatchMode,
+        ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
     };
     use std::{
-        collections::HashMap,
+        collections::{HashMap, HashSet},
         fs,
         path::PathBuf,
         sync::{
@@ -773,8 +815,33 @@ mod tests {
     #[test]
     fn tokenizes_and_matches_all_terms() {
         let tokens = normalize_query("Urlaub 2025");
-        assert!(matches_name("Urlaub_2025_Berlin.jpg", &tokens));
-        assert!(!matches_name("Urlaub_Berlin.jpg", &tokens));
+        assert!(matches_name(
+            "Urlaub_2025_Berlin.jpg",
+            &tokens,
+            MatchMode::All
+        ));
+        assert!(!matches_name(
+            "Urlaub_Berlin.jpg",
+            &tokens,
+            MatchMode::All
+        ));
+        assert!(matches_name(
+            "Urlaub_Berlin.jpg",
+            &tokens,
+            MatchMode::Any
+        ));
+        assert!(!matches_name(
+            "Notiz_Berlin.txt",
+            &tokens,
+            MatchMode::Any
+        ));
+    }
+
+    #[test]
+    fn file_type_validation_rejects_unknown_and_excess_filters() {
+        assert!(validate_file_types(&["image".into(), "document".into()]).is_ok());
+        assert!(validate_file_types(&["../secret".into()]).is_err());
+        assert!(validate_file_types(&vec!["image".into(); 5]).is_err());
     }
 
     #[test]
@@ -819,6 +886,8 @@ mod tests {
         let outcome = scan_directory(
             root.clone(),
             &normalize_query("urlaub"),
+            MatchMode::All,
+            &HashSet::new(),
             2,
             3,
             &cancelled,
@@ -848,6 +917,8 @@ mod tests {
         let outcome = scan_directory(
             root.clone(),
             &normalize_query("match"),
+            MatchMode::All,
+            &HashSet::new(),
             500,
             1_000,
             &cancelled,
@@ -869,7 +940,16 @@ mod tests {
         let root = temp_test_dir("scan-missing");
         fs::remove_dir_all(&root).expect("remove scan root");
         let cancelled = AtomicBool::new(false);
-        let outcome = scan_directory(root, &normalize_query("match"), 2, 10, &cancelled, |_| {});
+        let outcome = scan_directory(
+            root,
+            &normalize_query("match"),
+            MatchMode::All,
+            &HashSet::new(),
+            2,
+            10,
+            &cancelled,
+            |_| {},
+        );
         assert_eq!(outcome.skipped_count, 1);
         assert_eq!(outcome.result_count, 0);
     }
@@ -887,6 +967,8 @@ mod tests {
         let outcome = scan_directory(
             root.clone(),
             &normalize_query("match"),
+            MatchMode::All,
+            &HashSet::new(),
             2,
             10,
             &cancelled,
@@ -927,9 +1009,46 @@ mod tests {
     fn matcher_stays_stable_under_large_input_volume() {
         let tokens = normalize_query("urlaub 2025");
         let matches = (0..100_000)
-            .filter(|index| matches_name(&format!("urlaub_2025_{index}.jpg"), &tokens))
+            .filter(|index| {
+                matches_name(
+                    &format!("urlaub_2025_{index}.jpg"),
+                    &tokens,
+                    MatchMode::All,
+                )
+            })
             .count();
         assert_eq!(matches, 100_000);
+    }
+
+    #[test]
+    fn scanner_filters_types_before_adding_results() {
+        let root = temp_test_dir("scan-file-types");
+        fs::write(root.join("urlaub-2025.jpg"), b"image").expect("write image");
+        fs::write(root.join("urlaub-2025.pdf"), b"document").expect("write document");
+        fs::write(root.join("urlaub-2024.mp3"), b"audio").expect("write audio");
+
+        let cancelled = AtomicBool::new(false);
+        let types = validate_file_types(&["image".into()]).expect("valid type");
+        let mut matches = Vec::new();
+        let outcome = scan_directory(
+            root.clone(),
+            &normalize_query("urlaub 2025"),
+            MatchMode::Any,
+            &types,
+            10,
+            100,
+            &cancelled,
+            |event| {
+                if let ScanEvent::Batch { items, .. } = event {
+                    matches.extend(items.into_iter().map(|item| item.display_name));
+                }
+            },
+        );
+        assert_eq!(matches, vec!["urlaub-2025.jpg"]);
+        assert_eq!(outcome.scanned_count, 3);
+        assert_eq!(outcome.result_count, 1);
+        assert!(!outcome.cancelled);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

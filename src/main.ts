@@ -6,6 +6,8 @@ import { LazyStore } from "@tauri-apps/plugin-store";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
+type MatchMode = "all" | "any";
+type FileKind = "image" | "document" | "audio" | "text";
 
 interface PlatformCapabilities {
   platform: string;
@@ -31,6 +33,8 @@ interface SearchRequest {
   sessionId: string;
   rootPathKey: string;
   query: string;
+  matchMode: MatchMode;
+  fileTypes: FileKind[];
   batchSize: number;
   maxResults: number;
 }
@@ -66,6 +70,8 @@ interface SearchCancelledPayload {
 
 interface AppState {
   query: string;
+  matchMode: MatchMode;
+  fileTypes: Set<FileKind>;
   sourcePath: string | null;
   sourcePathKey: string | null;
   sourceLabel: string;
@@ -76,6 +82,8 @@ interface AppState {
   searching: boolean;
   activeSessionId: string | null;
   scannedCount: number;
+  elapsedMs: number;
+  searchStartedAt: number | null;
   skippedCount: number;
   limitReached: boolean;
   theme: Theme;
@@ -84,6 +92,8 @@ interface AppState {
 
 const initialState: AppState = {
   query: "",
+  matchMode: "all",
+  fileTypes: new Set<FileKind>(),
   sourcePath: null,
   sourcePathKey: null,
   sourceLabel: "Ordner wählen",
@@ -94,6 +104,8 @@ const initialState: AppState = {
   searching: false,
   activeSessionId: null,
   scannedCount: 0,
+  elapsedMs: 0,
+  searchStartedAt: null,
   skippedCount: 0,
   limitReached: false,
   theme: "cyan",
@@ -258,6 +270,16 @@ async function saveTheme(theme: Theme): Promise<void> {
   await settings.save();
 }
 
+async function loadMatchMode(): Promise<MatchMode | null> {
+  const value = await settings.get<string>("matchMode");
+  return value === "all" || value === "any" ? value : null;
+}
+
+async function saveMatchMode(mode: MatchMode): Promise<void> {
+  await settings.set("matchMode", mode);
+  await settings.save();
+}
+
 async function listenSearchEvents(listeners: SearchListeners): Promise<UnlistenFn[]> {
   if (browserTestAdapter?.listenSearchEvents) return browserTestAdapter.listenSearchEvents(listeners);
   return Promise.all([
@@ -282,12 +304,14 @@ async function closeWindow(): Promise<void> {
 
 const state: AppState = structuredClone(initialState);
 state.selectedIds = new Set<string>();
+state.fileTypes = new Set<FileKind>();
 
 const SEARCH_RESULT_LIMIT = 20_000;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 const DEFAULT_RESULT_ROW_HEIGHT = 40;
 let resultRenderScheduled = false;
 let virtualRenderScheduled = false;
+let progressTimer: number | null = null;
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -298,6 +322,8 @@ function byId<T extends HTMLElement>(id: string): T {
 const ui = {
   form: byId<HTMLFormElement>("search-form"),
   query: byId<HTMLInputElement>("query-input"),
+  matchMode: byId<HTMLSelectElement>("match-mode-select"),
+  fileTypeButtons: [...document.querySelectorAll<HTMLButtonElement>("[data-file-type]")],
   sourceLabel: byId<HTMLElement>("source-label"),
   sourceNav: byId<HTMLButtonElement>("choose-source-nav"),
   mobileSource: byId<HTMLButtonElement>("mobile-source-button"),
@@ -310,6 +336,11 @@ const ui = {
   statusIcon: byId<HTMLElement>("status-icon"),
   statusProgress: byId<HTMLElement>("status-progress"),
   statusAnnouncer: byId<HTMLElement>("status-announcer"),
+  metricScanned: byId<HTMLElement>("metric-scanned"),
+  metricFound: byId<HTMLElement>("metric-found"),
+  metricElapsed: byId<HTMLElement>("metric-elapsed"),
+  metricSpeed: byId<HTMLElement>("metric-speed"),
+  metricFilter: byId<HTMLElement>("metric-filter"),
   selectionSummary: byId<HTMLElement>("selection-summary"),
   cancel: byId<HTMLButtonElement>("cancel-search"),
   open: byId<HTMLButtonElement>("open-selected"),
@@ -317,6 +348,9 @@ const ui = {
   export: byId<HTMLButtonElement>("export-results"),
   sort: byId<HTMLSelectElement>("sort-select"),
   theme: byId<HTMLSelectElement>("theme-select"),
+  settingsDialog: byId<HTMLDialogElement>("settings-dialog"),
+  settingsTheme: byId<HTMLSelectElement>("settings-theme-select"),
+  settingsMatch: byId<HTMLSelectElement>("settings-match-select"),
   searchHelp: byId<HTMLDialogElement>("search-help-dialog"),
   previewName: byId<HTMLElement>("preview-name"),
   previewSummary: byId<HTMLElement>("preview-summary"),
@@ -338,7 +372,7 @@ function setStatus(
   ui.statusIcon.dataset.tone = tone;
   ui.statusIcon.closest(".status-block")?.setAttribute("data-tone", tone);
   ui.statusProgress.hidden = tone !== "working";
-  ui.statusProgress.setAttribute("aria-valuetext", tone === "working" ? detail : title);
+  ui.statusProgress.setAttribute("aria-valuetext", tone === "working" ? `${state.scannedCount} Einträge geprüft; Gesamtzahl unbekannt` : title);
 
   if (announce) {
     const message = `${title}. ${detail}`;
@@ -349,6 +383,57 @@ function setStatus(
 function formatDuration(durationMs: number): string {
   if (durationMs < 1_000) return `${durationMs} ms`;
   return `${(durationMs / 1_000).toLocaleString("de-DE", { maximumFractionDigits: 1 })} s`;
+}
+
+const kindLabels: Record<FileKind, string> = {
+  image: "Bilder",
+  document: "Dokumente",
+  audio: "Audio",
+  text: "Sonstige",
+};
+
+function renderSearchOptions(): void {
+  ui.matchMode.value = state.matchMode;
+  ui.matchMode.disabled = state.searching;
+  ui.settingsMatch.value = state.matchMode;
+  ui.settingsMatch.disabled = state.searching;
+  ui.settingsTheme.value = state.theme;
+  for (const button of ui.fileTypeButtons) {
+    const kind = button.dataset.fileType;
+    const selected = kind === "all" ? state.fileTypes.size === 0 : state.fileTypes.has(kind as FileKind);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = state.searching;
+  }
+}
+
+function renderMetrics(): void {
+  ui.metricScanned.textContent = state.scannedCount.toLocaleString("de-DE");
+  ui.metricFound.textContent = state.results.length.toLocaleString("de-DE");
+  ui.metricElapsed.textContent = formatDuration(state.elapsedMs);
+  ui.metricSpeed.textContent = state.elapsedMs >= 250
+    ? Math.round(state.scannedCount / (state.elapsedMs / 1_000)).toLocaleString("de-DE")
+    : "–";
+  const types = [...state.fileTypes].map((kind) => kindLabels[kind]);
+  ui.metricFilter.textContent = types.length > 0 ? types.join(", ") : "Alle Typen";
+  ui.metricFilter.title = `${ui.metricFilter.textContent} · ${state.matchMode === "all" ? "alle Wörter" : "mindestens ein Wort"}`;
+}
+
+function stopProgressTimer(): void {
+  if (progressTimer !== null) window.clearInterval(progressTimer);
+  progressTimer = null;
+  if (state.searchStartedAt !== null) state.elapsedMs = Date.now() - state.searchStartedAt;
+  state.searchStartedAt = null;
+}
+
+function startProgressTimer(): void {
+  stopProgressTimer();
+  state.elapsedMs = 0;
+  state.searchStartedAt = Date.now();
+  progressTimer = window.setInterval(() => {
+    if (state.searchStartedAt === null) return;
+    state.elapsedMs = Date.now() - state.searchStartedAt;
+    renderMetrics();
+  }, 500);
 }
 
 function currentPreview(): FileEntry | null {
@@ -519,6 +604,7 @@ function renderResults(): void {
   ui.export.disabled = state.results.length === 0;
   ui.export.title = state.limitReached ? "Die gespeicherte Liste ist unvollständig, weil die Treffergrenze erreicht wurde." : "";
   renderPreview();
+  renderMetrics();
 }
 
 function scheduleRenderResults(): void {
@@ -544,6 +630,7 @@ function render(): void {
   ui.theme.value = state.theme;
   ui.sourceLabel.textContent = state.sourceLabel;
   ui.cancel.disabled = !state.searching;
+  renderSearchOptions();
   renderResults();
 }
 
@@ -601,10 +688,12 @@ async function runSearch(): Promise<void> {
   state.selectedIds.clear();
   state.previewId = null;
   state.scannedCount = 0;
+  state.elapsedMs = 0;
   state.skippedCount = 0;
   state.limitReached = false;
   ui.results.scrollTop = 0;
   state.searching = true;
+  startProgressTimer();
   render();
   setStatus("Suche läuft", "Dateinamen werden geprüft …", "working");
 
@@ -616,10 +705,13 @@ async function runSearch(): Promise<void> {
       sessionId,
       rootPathKey: state.sourcePathKey,
       query,
+      matchMode: state.matchMode,
+      fileTypes: [...state.fileTypes],
       batchSize: 250,
       maxResults: SEARCH_RESULT_LIMIT,
     });
   } catch (error) {
+    stopProgressTimer();
     state.searching = false;
     state.activeSessionId = null;
     setStatus("Suche konnte nicht starten", safeMessage(error), "error");
@@ -643,6 +735,8 @@ async function initialize(): Promise<void> {
 
   const storedTheme = await loadTheme().catch(() => null);
   if (storedTheme) state.theme = storedTheme;
+  const storedMatchMode = await loadMatchMode().catch(() => null);
+  if (storedMatchMode) state.matchMode = storedMatchMode;
 
   await listenSearchEvents({
     onBatch(payload) {
@@ -654,6 +748,7 @@ async function initialize(): Promise<void> {
     onProgress(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
       state.scannedCount = payload.scannedCount;
+      renderMetrics();
       setStatus(
         "Suche läuft",
         `${payload.scannedCount.toLocaleString("de-DE")} geprüft · ${state.results.length.toLocaleString("de-DE")} Treffer`,
@@ -664,7 +759,10 @@ async function initialize(): Promise<void> {
     onFinished(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
       state.searching = false;
+      stopProgressTimer();
       state.activeSessionId = null;
+      state.scannedCount = payload.scannedCount;
+      state.elapsedMs = payload.durationMs;
       state.skippedCount = payload.skippedCount;
       state.limitReached = payload.limitReached;
       const skipped = payload.skippedCount > 0 ? ` · ${payload.skippedCount} übersprungen` : "";
@@ -687,6 +785,7 @@ async function initialize(): Promise<void> {
     onCancelled(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
       state.searching = false;
+      stopProgressTimer();
       state.activeSessionId = null;
       setStatus("Suche abgebrochen", `${state.results.length} bisherige Treffer bleiben sichtbar.`);
       render();
@@ -722,12 +821,45 @@ async function initialize(): Promise<void> {
     renderResults();
   });
   ui.results.addEventListener("scroll", scheduleVirtualRender, { passive: true });
-  ui.theme.addEventListener("change", () => {
-    if (!isTheme(ui.theme.value)) return;
-    state.theme = ui.theme.value as Theme;
-    void saveTheme(state.theme);
-    render();
+  function changeMatchMode(mode: string): void {
+    if (mode !== "all" && mode !== "any") return;
+    state.matchMode = mode;
+    renderSearchOptions();
+    renderMetrics();
+    void saveMatchMode(mode).catch((error) => console.warn("Suchmodus konnte nicht gespeichert werden", error));
+  }
+  ui.matchMode.addEventListener("change", () => changeMatchMode(ui.matchMode.value));
+  ui.settingsMatch.addEventListener("change", () => changeMatchMode(ui.settingsMatch.value));
+  ui.fileTypeButtons.forEach((button) => button.addEventListener("click", () => {
+    if (state.searching) return;
+    const kind = button.dataset.fileType;
+    if (kind === "all") state.fileTypes.clear();
+    else if (kind === "image" || kind === "document" || kind === "audio" || kind === "text") {
+      if (state.fileTypes.has(kind)) state.fileTypes.delete(kind);
+      else state.fileTypes.add(kind);
+    }
+    renderSearchOptions();
+    renderMetrics();
+  }));
+
+  byId<HTMLButtonElement>("nav-file-types").addEventListener("click", () => {
+    const first = ui.fileTypeButtons[0];
+    first?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    first?.focus();
   });
+  const showSettings = () => ui.settingsDialog.showModal();
+  byId<HTMLButtonElement>("settings-button").addEventListener("click", showSettings);
+  byId<HTMLButtonElement>("nav-settings").addEventListener("click", showSettings);
+  function changeTheme(value: string): void {
+    if (!isTheme(value)) return;
+    state.theme = value;
+    void saveTheme(state.theme).catch((error) => console.warn("Farbschema konnte nicht gespeichert werden", error));
+    render();
+  }
+  ui.theme.addEventListener("change", () => {
+    changeTheme(ui.theme.value);
+  });
+  ui.settingsTheme.addEventListener("change", () => changeTheme(ui.settingsTheme.value));
 
   document.querySelectorAll<HTMLButtonElement>("[data-query-chip]").forEach((button) => {
     button.addEventListener("click", () => {
