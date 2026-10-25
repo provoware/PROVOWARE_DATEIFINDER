@@ -70,7 +70,7 @@ test("file actions use lossless path keys instead of display paths", () => {
 
 test("search progress is independent of match branch", () => {
   const progressIndex = rust.indexOf("should_emit_progress(scanned_count, last_progress)");
-  const matchIndex = rust.indexOf("if !matches_name(&name, tokens, match_mode)");
+  const matchIndex = rust.indexOf("if !matches_name(&name, filters.tokens, filters.match_mode)");
   assert.ok(progressIndex > 0 && matchIndex > 0 && progressIndex < matchIndex);
 });
 
@@ -78,7 +78,7 @@ test("file type and word-mode filtering is bounded before metadata is read", () 
   assert.match(rust, /validate_file_types\(&request\.file_types\)\?/u);
   assert.match(rust, /types\.len\(\) > 4/u);
   assert.match(rust, /MatchMode::Any => tokens\.iter\(\)\.any/u);
-  const typeFilter = rust.indexOf("!file_types.is_empty() && !file_types.contains(classify(&extension))");
+  const typeFilter = rust.indexOf("!filters.file_types.is_empty() && !filters.file_types.contains(classify(&extension))");
   const metadata = rust.indexOf("let metadata = match entry.metadata()");
   assert.ok(typeFilter > 0 && metadata > typeFilter, "file type filter must run before file metadata");
 });
