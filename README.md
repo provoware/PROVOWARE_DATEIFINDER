@@ -31,6 +31,33 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 Voraussetzungen: Node.js >= 20.19, Rust >= 1.77.2 und die Tauri-Systempakete für das jeweilige Betriebssystem.
 
+### Empfohlen: Linux Mint, Kubuntu und Ubuntu
+
+Der Startassistent prüft vor jedem Start den Projektordner, Node.js/npm,
+Linux-Bibliotheken, Rust/Cargo und die JavaScript-Abhängigkeiten. Fehlende
+Komponenten werden nach verständlicher Rückfrage eingerichtet; nötige
+Administratorrechte fordert Linux selbst an. Der Starter führt weder
+`apt upgrade` noch `npm audit fix --force` aus.
+
+```bash
+./start.sh --check       # Nur prüfen, nichts reparieren oder starten
+./start.sh               # Prüfen, bei Bedarf reparieren, Anwendung starten
+```
+
+Weitere Optionen: `--no-repair` (niemals installieren), `--audit` (zusätzliche
+Sicherheitsprüfung), `--yes` (Installationen ohne Rückfrage ausdrücklich erlauben)
+und `--help`. Mit `Strg+C` lässt sich der laufende Start beenden. Das
+Diagnoseprotokoll wird jeweils im Terminal angezeigt und unter
+`~/.local/state/provoware-dateifinder/` gespeichert (gegebenenfalls unter
+`$XDG_STATE_HOME`).
+
+Die automatische Systemreparatur ist bewusst auf Tauri 2 unter Debian-basiertem
+Linux begrenzt. Fehlt eine geeignete Node.js-Version und ist kein `nvm`
+vorinstalliert, verweist der Assistent auf die manuelle Node.js-Installation.
+Er kann keine Projektfehler im Quellcode selbstständig beheben.
+
+### Manueller Entwicklungsstart
+
 ```bash
 npm install
 npm run tauri dev
