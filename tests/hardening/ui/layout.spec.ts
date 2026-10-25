@@ -192,6 +192,7 @@ test("changing the folder resets stale results and visual preview details", asyn
   await expect(page.locator("#preview-visual")).toHaveAttribute("data-kind", "image");
   await expect(page.locator("#preview-visual")).toHaveAttribute("data-caption", "Bilder");
   await expect(page.locator("#preview-summary")).toContainText("Bilder");
+  await expect(page.locator("#status-title")).toHaveText("1 Datei gefunden");
   await page.locator("#choose-source-nav").click();
   await expect(page.locator(".result-row")).toHaveCount(0);
   await expect(page.locator("#empty-title")).toContainText("Suchort bereit");
