@@ -113,7 +113,7 @@ pub(crate) fn valid_session_id(id: &str) -> bool {
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
     if cancel.load(Ordering::Relaxed) {
-        Err("Die Dateiaktion wurde abgebrochen. Originaldateien bleiben geschützt.".into())
+        Err("Abbruch: Fertige Dateien liegen im Ziel, übrige Originale bleiben erhalten.".into())
     } else {
         Ok(())
     }

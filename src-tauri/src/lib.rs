@@ -908,16 +908,17 @@ async fn execute_file_action(
         return Err("Zielordner ist nicht lesbar.".into());
     }
 
-    let mut active = registry
-        .0
-        .lock()
-        .map_err(|_| "Dateiaktionsstatus blockiert.")?;
-    if !active.is_empty() {
-        return Err("Es läuft bereits eine Dateiaktion. Bitte warten oder abbrechen.".into());
-    }
     let flag = Arc::new(AtomicBool::new(false));
-    active.insert(request.session_id.clone(), flag.clone());
-    drop(active);
+    {
+        let mut active = registry
+            .0
+            .lock()
+            .map_err(|_| "Dateiaktionsstatus blockiert.")?;
+        if !active.is_empty() {
+            return Err("Es läuft bereits eine Dateiaktion. Bitte warten oder abbrechen.".into());
+        }
+        active.insert(request.session_id.clone(), flag.clone());
+    }
 
     let session = request.session_id.clone();
     let callback_session = session.clone();
