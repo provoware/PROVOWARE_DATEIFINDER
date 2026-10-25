@@ -31,6 +31,8 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ Mehrwortsuche mit „alle Wörter“ oder „mindestens eines“
 - ✅ live sichtbare Prüfzahlen, Treffer, Laufzeit und Suchgeschwindigkeit (Fortschritt ohne erfundene Prozentzahl)
 - ✅ Einstellungen im Dashboard-Header für Farbschema und Suchwort-Vorgabe
+- ✅ dezente Farbtönung der Ergebniszeilen für Bilder, Dokumente, Audio und sonstige Dateien
+- ✅ Startprüfung für belegten Vite-Port 1420 mit sicherer Zuordnung statt blindem Prozessabbruch
 
 ## Schnellstart
 
@@ -50,7 +52,7 @@ Administratorrechte fordert Linux selbst an. Der Starter führt weder
 ```
 
 Weitere Optionen: `--no-repair` (niemals installieren), `--audit` (zusätzliche
-Sicherheitsprüfung), `--yes` (Installationen ohne Rückfrage ausdrücklich erlauben)
+Sicherheitsprüfung), `--yes` (freigegebene Reparaturen ohne Rückfrage erlauben)
 und `--help`. Mit `Strg+C` lässt sich der laufende Start beenden. Das
 Diagnoseprotokoll wird jeweils im Terminal angezeigt und unter
 `~/.local/state/provoware-dateifinder/` gespeichert (gegebenenfalls unter
@@ -60,6 +62,16 @@ Die automatische Systemreparatur ist bewusst auf Tauri 2 unter Debian-basiertem
 Linux begrenzt. Fehlt eine geeignete Node.js-Version und ist kein `nvm`
 vorinstalliert, verweist der Assistent auf die manuelle Node.js-Installation.
 Er kann keine Projektfehler im Quellcode selbstständig beheben.
+
+**Falls Port 1420 bereits belegt ist:** Der Assistent prüft zuerst den
+Prozessbesitzer, den genauen Projektordner und den Vite-Startbefehl. Einen
+eindeutig eigenen Entwicklungsserver beendet er erst nach Zustimmung (mit
+`--yes` ist diese Zustimmung vorab erteilt). Fremde oder nicht eindeutig
+erkannte Prozesse werden **niemals** beendet; stattdessen zeigt der Starter
+einen verständlichen Hinweis. `--check` verändert nichts, `--no-repair`
+stoppt ohne Reparatur. Ein erst beim Programmstart entstandener Portkonflikt
+erhält höchstens einen weiteren Startversuch. Ohne `ss` ist keine sichere
+automatische Prozesszuordnung möglich; dann gibt es nur eine Warnung.
 
 ### Manueller Entwicklungsstart
 
@@ -95,6 +107,10 @@ Die UI kennt nur **Fähigkeiten und Ports**, nicht Windows/Android/iOS-Sonderfä
 4. Während der Suche zeigt der Ergebnisbereich geprüfte Einträge, Trefferzahl, Laufzeit und Einträge pro Sekunde. Weil die Gesamtzahl vorab unbekannt ist, läuft der Balken ohne Prozentversprechen.
 
 Das Fenster lässt sich verkleinern und vergrößern. Große Trefferlisten erweitern nicht das Fenster, sondern scrollen innerhalb des Ergebnisbereichs. Über das Zahnrad im Header lassen sich Farbschema und Standard-Suchmodus einstellen.
+
+Die Trefferliste markiert Bilder dezent cyanblau, Dokumente rosarot,
+Audio violett und sonstige Dateien grünlich. Die Dateinamen bleiben gut
+lesbar; die Farben ergänzen Dateisymbol und Dateityp, statt sie zu ersetzen.
 
 Siehe:
 

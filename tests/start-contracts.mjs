@@ -41,7 +41,14 @@ printf '%s\\n' "$*" >> "$MOCK_CALLS"
 case "$1" in
   --version) echo 11.0.0 ;;
   ls) [[ "$MOCK_NPM_LS_FAIL" != 1 ]] ;;
-  run) [[ "$MOCK_APP_FAIL" != 1 ]] ;;
+  run)
+    if [[ "$MOCK_APP_PORT_RACE" == 1 && ! -e "$MOCK_PORT_MARKER" ]]; then
+      : > "$MOCK_PORT_MARKER"
+      echo 'Error: Port 1420 is already in use' >&2
+      exit 1
+    fi
+    [[ "$MOCK_APP_FAIL" != 1 ]]
+    ;;
   *) exit 0 ;;
 esac
 `);
@@ -50,6 +57,19 @@ if [[ "$MOCK_PACKAGES_INSTALLED" == 1 ]]; then
   printf 'install ok installed'
 else
   printf 'not-installed'
+fi
+`);
+  mockFile(join(bin, 'ss'), `#!/usr/bin/env bash
+if [[ "$MOCK_PORT_WITHOUT_OWNER" == 1 ]]; then
+  echo 'LISTEN 0 511 127.0.0.1:1420 0.0.0.0:*'
+  exit 0
+fi
+if [[ "$MOCK_APP_PORT_RACE" == 1 && ! -e "$MOCK_PORT_MARKER" ]]; then exit 0; fi
+if [[ -n "$MOCK_PORT_PID" && -r "/proc/$MOCK_PORT_PID/stat" ]]; then
+  status="$(awk '{print $3}' "/proc/$MOCK_PORT_PID/stat")"
+  if [[ "$status" != Z ]]; then
+    printf 'LISTEN 0 511 127.0.0.1:1420 0.0.0.0:* users:(("node",pid=%s,fd=19))\\n' "$MOCK_PORT_PID"
+  fi
 fi
 `);
   if (cargo) {
@@ -72,11 +92,15 @@ if [[ "$1" == --version ]]; then echo 'cargo 1.98.1'; else echo '{}'; fi
     MOCK_PACKAGES_INSTALLED: packages ? '1' : '0',
     MOCK_NPM_LS_FAIL: npmLsFails ? '1' : '0',
     MOCK_APP_FAIL: appFails ? '1' : '0',
+    MOCK_APP_PORT_RACE: '0',
+    MOCK_PORT_WITHOUT_OWNER: '0',
+    MOCK_PORT_MARKER: join(directory, 'port-claimed.marker'),
   };
 
   return {
     directory,
     calls,
+    env,
     run(args) {
       return spawnSync('/bin/bash', [join(directory, 'start.sh'), ...args], {
         cwd: directory, env, encoding: 'utf8', timeout: 12_000, ...nobody,
@@ -89,11 +113,25 @@ if [[ "$1" == --version ]]; then echo 'cargo 1.98.1'; else echo '{}'; fi
   };
 }
 
+function mockViteProcess(f) {
+  const viteDir = join(f.directory, 'node_modules', 'vite', 'bin');
+  mkdirSync(viteDir, { recursive: true, mode: 0o755 });
+  const vitePath = join(viteDir, 'vite.js');
+  writeFileSync(vitePath, 'setInterval(() => {}, 1000);\n');
+  const child = spawn(process.execPath, [vitePath, '--port', '1420'], {
+    cwd: f.directory,
+    stdio: 'ignore',
+    ...nobody,
+  });
+  f.env.MOCK_PORT_PID = String(child.pid);
+  return child;
+}
+
 test('Hilfe ist ohne Projekt und ohne Änderungen verfügbar', () => {
   const f = fixture({ project: false });
   try {
     const result = f.run(['--help']);
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, JSON.stringify({ signal: result.signal, error: result.error?.message, stdout: result.stdout, stderr: result.stderr }));
     assert.match(result.stdout, /--check/);
     assert.equal(f.callsText(), '');
   } finally { f.cleanup(); }
@@ -190,4 +228,83 @@ test('Fehlerhafter App-Start wird mit verständlichem Fehler beendet', () => {
     assert.match(result.stdout, /Anwendung wurde mit Fehlercode/);
     assert.match(f.callsText(), /run tauri -- dev/);
   } finally { f.cleanup(); }
+});
+
+test('Prüfmodus meldet belegten Port ohne Prozesse zu beenden', async () => {
+  const f = fixture();
+  const vite = mockViteProcess(f);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const result = f.run(['--check']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Port 1420 ist bereits belegt/);
+    assert.match(result.stdout, /mit Hinweis abgeschlossen/);
+    assert.equal(vite.exitCode, null);
+    assert.doesNotMatch(f.callsText(), /run tauri/);
+  } finally { vite.kill('SIGTERM'); f.cleanup(); }
+});
+
+test('Nur eindeutig eigener Vite-Prozess wird mit --yes beendet', async () => {
+  const f = fixture();
+  const vite = mockViteProcess(f);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const result = f.run(['--yes']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Eigener Vite-Prozess/);
+    assert.match(result.stdout, /Port 1420 ist wieder frei/);
+    assert.match(f.callsText(), /run tauri -- dev/);
+  } finally { vite.kill('SIGTERM'); f.cleanup(); }
+});
+
+test('Fremder Prozess bleibt auch mit --yes unangetastet', async () => {
+  const f = fixture();
+  const stranger = spawn('sleep', ['20'], { cwd: f.directory, stdio: 'ignore', ...nobody });
+  try {
+    f.env.MOCK_PORT_PID = String(stranger.pid);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const result = f.run(['--yes']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /wird nicht beendet/);
+    assert.equal(stranger.exitCode, null);
+    assert.doesNotMatch(f.callsText(), /run tauri/);
+  } finally { stranger.kill('SIGTERM'); f.cleanup(); }
+});
+
+test('--no-repair stoppt bei eigenem belegten Port ohne Signal', async () => {
+  const f = fixture();
+  const vite = mockViteProcess(f);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const result = f.run(['--no-repair']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /Keine Prozesse wurden verändert/);
+    assert.equal(vite.exitCode, null);
+    assert.doesNotMatch(f.callsText(), /run tauri/);
+  } finally { vite.kill('SIGTERM'); f.cleanup(); }
+});
+
+test('Portbelegung ohne eindeutige PID wird auch mit --yes nie beendet', () => {
+  const f = fixture();
+  try {
+    f.env.MOCK_PORT_WITHOUT_OWNER = '1';
+    const result = f.run(['--yes']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /nicht eindeutig erkennbar/);
+    assert.doesNotMatch(f.callsText(), /run tauri/);
+  } finally { f.cleanup(); }
+});
+
+test('Später Portkonflikt wird höchstens einmal nach sicherem Stopp neu versucht', async () => {
+  const f = fixture();
+  const vite = mockViteProcess(f);
+  try {
+    f.env.MOCK_APP_PORT_RACE = '1';
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const result = f.run(['--yes']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Portkonflikt erst während des Starts erkannt/);
+    assert.match(result.stdout, /Zweiter und letzter Startversuch/);
+    assert.equal(f.callsText().match(/run tauri -- dev/g)?.length, 2);
+  } finally { vite.kill('SIGTERM'); f.cleanup(); }
 });

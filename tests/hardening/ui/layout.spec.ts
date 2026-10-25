@@ -4,12 +4,13 @@ const themes = ["cyan", "purple", "green", "orange"] as const;
 
 async function installSearchAdapter(
   page: import("@playwright/test").Page,
-  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number } = {},
+  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[] } = {},
 ) {
   await page.addInitScript((testOptions) => {
     const {
       listenerFailure = false,
       itemCount = 1,
+      kinds = [],
       limitReached = false,
       reportedResultCount = itemCount,
     } = testOptions;
@@ -53,7 +54,7 @@ async function installSearchAdapter(
           extension: "pdf",
           sizeBytes: 2048 + index,
           modifiedAt: 1_735_689_600_000 + index,
-          kind: "document",
+          kind: kinds[index] ?? "document",
         }));
         runtime.__searchListeners?.onBatch({
           sessionId: request.sessionId,
@@ -139,6 +140,27 @@ test("large result sets render only the visible virtual window", async ({ page }
   }));
   expect(dimensions.viewport).toBeGreaterThan(0);
   expect(dimensions.total).toBeGreaterThan(dimensions.viewport);
+});
+
+test("file kinds have subtle distinct row colors in all four themes", async ({ page }) => {
+  await installSearchAdapter(page, { itemCount: 4, kinds: ["image", "document", "audio", "text"] });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator(".result-row")).toHaveCount(4);
+
+  for (const theme of themes) {
+    await page.locator("#theme-select").selectOption(theme);
+    const values = await page.locator(".result-row").evaluateAll((rows) => rows.map((row) => ({
+      kind: (row as HTMLElement).dataset.kind,
+      tint: getComputedStyle(row).getPropertyValue("--file-kind-rgb").trim(),
+      background: getComputedStyle(row).backgroundImage,
+    })));
+    expect(new Set(values.map((value) => value.kind))).toEqual(new Set(["image", "document", "audio", "text"]));
+    expect(new Set(values.map((value) => value.tint)).size).toBe(4);
+    expect(values.every((value) => value.background.includes("linear-gradient"))).toBe(true);
+  }
 });
 
 test("file types and any-word matching are forwarded before the scan", async ({ page }) => {

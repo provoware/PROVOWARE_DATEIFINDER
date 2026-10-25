@@ -511,6 +511,8 @@ function renderVisibleResultRows(): void {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "result-row";
+    row.dataset.kind = file.kind === "image" || file.kind === "document" || file.kind === "audio" || file.kind === "text"
+      ? file.kind : "other";
     row.dataset.fileId = file.id;
     row.style.transform = `translateY(${index * rowHeight}px)`;
     row.setAttribute("aria-pressed", String(state.selectedIds.has(file.id)));
