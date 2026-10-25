@@ -353,11 +353,15 @@ struct ScanOutcome {
     limit_reached: bool,
 }
 
+struct ScanFilters<'a> {
+    tokens: &'a [String],
+    match_mode: MatchMode,
+    file_types: &'a HashSet<String>,
+}
+
 fn scan_directory<F>(
     root: PathBuf,
-    tokens: &[String],
-    match_mode: MatchMode,
-    file_types: &HashSet<String>,
+    filters: ScanFilters<'_>,
     batch_size: usize,
     max_results: usize,
     cancelled: &AtomicBool,
@@ -447,14 +451,14 @@ where
             }
 
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !matches_name(&name, tokens, match_mode) {
+            if !matches_name(&name, filters.tokens, filters.match_mode) {
                 continue;
             }
             let extension = Path::new(&name)
                 .extension()
                 .map(|value| value.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            if !file_types.is_empty() && !file_types.contains(classify(&extension)) {
+            if !filters.file_types.is_empty() && !filters.file_types.contains(classify(&extension)) {
                 continue;
             }
 
@@ -606,9 +610,11 @@ fn start_search(
         let started = Instant::now();
         let outcome = scan_directory(
             canonical_root,
-            &tokens,
-            match_mode,
-            &file_types,
+            ScanFilters {
+                tokens: &tokens,
+                match_mode,
+                file_types: &file_types,
+            },
             batch_size,
             max_results,
             &cancelled,
@@ -789,8 +795,8 @@ mod tests {
         canonical_child, canonical_scan_directory, classify, decode_path, encode_path,
         matches_name, normalize_query, register_search_session, scan_directory,
         should_emit_progress, validate_export_lines, validate_file_types, validate_query,
-        MatchMode, ScanEvent, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES,
-        MAX_QUERY_TOKENS,
+        MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
+        MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
     };
     use std::{
         collections::{HashMap, HashSet},
@@ -874,9 +880,11 @@ mod tests {
         let mut batch_sizes = Vec::new();
         let outcome = scan_directory(
             root.clone(),
-            &normalize_query("urlaub"),
-            MatchMode::All,
-            &HashSet::new(),
+            ScanFilters {
+                tokens: &normalize_query("urlaub"),
+                match_mode: MatchMode::All,
+                file_types: &HashSet::new(),
+            },
             2,
             3,
             &cancelled,
@@ -905,9 +913,11 @@ mod tests {
         let mut emitted_items = 0usize;
         let outcome = scan_directory(
             root.clone(),
-            &normalize_query("match"),
-            MatchMode::All,
-            &HashSet::new(),
+            ScanFilters {
+                tokens: &normalize_query("match"),
+                match_mode: MatchMode::All,
+                file_types: &HashSet::new(),
+            },
             500,
             1_000,
             &cancelled,
@@ -931,9 +941,11 @@ mod tests {
         let cancelled = AtomicBool::new(false);
         let outcome = scan_directory(
             root,
-            &normalize_query("match"),
-            MatchMode::All,
-            &HashSet::new(),
+            ScanFilters {
+                tokens: &normalize_query("match"),
+                match_mode: MatchMode::All,
+                file_types: &HashSet::new(),
+            },
             2,
             10,
             &cancelled,
@@ -955,9 +967,11 @@ mod tests {
         let cancelled = AtomicBool::new(false);
         let outcome = scan_directory(
             root.clone(),
-            &normalize_query("match"),
-            MatchMode::All,
-            &HashSet::new(),
+            ScanFilters {
+                tokens: &normalize_query("match"),
+                match_mode: MatchMode::All,
+                file_types: &HashSet::new(),
+            },
             2,
             10,
             &cancelled,
@@ -1017,9 +1031,11 @@ mod tests {
         let mut matches = Vec::new();
         let outcome = scan_directory(
             root.clone(),
-            &normalize_query("urlaub 2025"),
-            MatchMode::Any,
-            &types,
+            ScanFilters {
+                tokens: &normalize_query("urlaub 2025"),
+                match_mode: MatchMode::Any,
+                file_types: &types,
+            },
             10,
             100,
             &cancelled,
