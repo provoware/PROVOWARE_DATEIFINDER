@@ -15,6 +15,13 @@ weiterführende Dateiaktionen mit Vor-/Nachkontrollen anbieten.
 6. Sichere, scrollbar begrenzte Textvorschau und Pfadkopierknopf.
 7. Dezente Neonanimation der Primäraktionen unter Beachtung von `prefers-reduced-motion`.
 
+### Sichtprüfung des 768×512-Referenzmodus
+
+Im PR #43 wurde das echte Chromium-Screenshot der neuen Startansicht begutachtet:
+Suchfilter, Statuszeile und Ergebnisbereich sind innerhalb der 768×512-Grenzen.
+Die ältere Cyan-Fixture-Referenz bleibt unverändert. Nur der bewusst geänderte
+Startbildschirm erhält eine aktualisierte Referenz-PNG und SHA-256-Prüfsumme.
+
 ## Ausstehend – Dateiaktionen (BLOCKS: Rust- und Browser-CI)
 
 - Kopieren in einen ausgewählten vorhandenen Ordner und auf Wunsch einen neu
