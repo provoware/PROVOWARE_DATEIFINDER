@@ -55,11 +55,19 @@ struct CleanupPath {
 
 impl CleanupPath {
     fn file(path: PathBuf) -> Self {
-        Self { path, directory: false, active: true }
+        Self {
+            path,
+            directory: false,
+            active: true,
+        }
     }
 
     fn directory(path: PathBuf) -> Self {
-        Self { path, directory: true, active: true }
+        Self {
+            path,
+            directory: true,
+            active: true,
+        }
     }
 
     fn disarm(&mut self) {
@@ -69,7 +77,9 @@ impl CleanupPath {
 
 impl Drop for CleanupPath {
     fn drop(&mut self) {
-        if !self.active { return; }
+        if !self.active {
+            return;
+        }
         if self.directory {
             let _ = fs::remove_dir_all(&self.path);
         } else {
@@ -85,14 +95,20 @@ pub(crate) fn valid_name(name: &str) -> bool {
         && !name.starts_with('.')
         && !name.ends_with('.')
         && !name.chars().any(|character| {
-            character.is_control() || matches!(character, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+            character.is_control()
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
         })
 }
 
 pub(crate) fn valid_session_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
-        && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
@@ -104,21 +120,29 @@ fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
 }
 
 fn compare_contents(source: &Path, copy: &Path, cancel: &AtomicBool) -> Result<bool, String> {
-    let mut original = File::open(source).map_err(|error| format!("Quelle nicht lesbar: {error}"))?;
+    let mut original =
+        File::open(source).map_err(|error| format!("Quelle nicht lesbar: {error}"))?;
     let mut target = File::open(copy).map_err(|error| format!("Ziel nicht lesbar: {error}"))?;
     let mut left = [0u8; COPY_BUFFER_BYTES];
     let mut right = [0u8; COPY_BUFFER_BYTES];
     loop {
         cancelled(cancel)?;
-        let length = original.read(&mut left).map_err(|error| format!("Quellprüfung fehlgeschlagen: {error}"))?;
+        let length = original
+            .read(&mut left)
+            .map_err(|error| format!("Quellprüfung fehlgeschlagen: {error}"))?;
         if length > 0 {
-            target.read_exact(&mut right[..length]).map_err(|error| format!("Zielprüfung fehlgeschlagen: {error}"))?;
+            target
+                .read_exact(&mut right[..length])
+                .map_err(|error| format!("Zielprüfung fehlgeschlagen: {error}"))?;
         }
         if left[..length] != right[..length] {
             return Ok(false);
         }
         if length == 0 {
-            return Ok(target.read(&mut right[..1]).map_err(|error| format!("Zielprüfung fehlgeschlagen: {error}"))? == 0);
+            return Ok(target
+                .read(&mut right[..1])
+                .map_err(|error| format!("Zielprüfung fehlgeschlagen: {error}"))?
+                == 0);
         }
     }
 }
@@ -134,11 +158,19 @@ fn copy_to_stage(source: &Path, target: &Path, cancel: &AtomicBool) -> Result<()
     let mut buffer = [0u8; COPY_BUFFER_BYTES];
     loop {
         cancelled(cancel)?;
-        let length = reader.read(&mut buffer).map_err(|error| format!("Lesefehler: {error}"))?;
-        if length == 0 { break; }
-        writer.write_all(&buffer[..length]).map_err(|error| format!("Schreibfehler: {error}"))?;
+        let length = reader
+            .read(&mut buffer)
+            .map_err(|error| format!("Lesefehler: {error}"))?;
+        if length == 0 {
+            break;
+        }
+        writer
+            .write_all(&buffer[..length])
+            .map_err(|error| format!("Schreibfehler: {error}"))?;
     }
-    writer.sync_all().map_err(|error| format!("Temporäres Ziel konnte nicht gesichert werden: {error}"))?;
+    writer
+        .sync_all()
+        .map_err(|error| format!("Temporäres Ziel konnte nicht gesichert werden: {error}"))?;
     cleanup.disarm();
     Ok(())
 }
@@ -154,34 +186,53 @@ fn same_file_identity(before: &Metadata, after: &Metadata) -> bool {
     before.len() == after.len() && before.modified().ok() == after.modified().ok()
 }
 
-pub(crate) fn preflight_sources(root: &Path, sources: &[PathBuf]) -> Result<Vec<(PathBuf, OsString, Metadata)>, String> {
+pub(crate) fn preflight_sources(
+    root: &Path,
+    sources: &[PathBuf],
+) -> Result<Vec<(PathBuf, OsString, Metadata)>, String> {
     if sources.is_empty() || sources.len() > MAX_ACTION_FILES {
         return Err(format!("Bitte 1 bis {MAX_ACTION_FILES} Dateien auswählen."));
     }
-    let canonical_root = root.canonicalize().map_err(|error| format!("Suchordner fehlt: {error}"))?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("Suchordner fehlt: {error}"))?;
     let mut names = HashSet::new();
     let mut paths = HashSet::new();
     let mut total_bytes = 0u64;
     let mut verified = Vec::with_capacity(sources.len());
     for source in sources {
-        let path = source.canonicalize().map_err(|error| format!("Datei fehlt: {error}"))?;
+        let path = source
+            .canonicalize()
+            .map_err(|error| format!("Datei fehlt: {error}"))?;
         if !path.starts_with(&canonical_root) || !path.is_file() {
             return Err("Mindestens eine Datei liegt außerhalb des freigegebenen Suchorts.".into());
         }
-        let metadata = fs::symlink_metadata(&path).map_err(|error| format!("Quelldatei nicht prüfbar: {error}"))?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("Quelldatei nicht prüfbar: {error}"))?;
         if !metadata.is_file() || metadata.file_type().is_symlink() {
-            return Err("Verknüpfungen und besondere Dateitypen können nicht verarbeitet werden.".into());
+            return Err(
+                "Verknüpfungen und besondere Dateitypen können nicht verarbeitet werden.".into(),
+            );
         }
-        let name = path.file_name().ok_or("Ungültiger Dateiname.")?.to_os_string();
+        let name = path
+            .file_name()
+            .ok_or("Ungültiger Dateiname.")?
+            .to_os_string();
         if !names.insert(name.clone()) {
-            return Err("Zwei ausgewählte Dateien haben denselben Namen. Bitte getrennt übertragen.".into());
+            return Err(
+                "Zwei ausgewählte Dateien haben denselben Namen. Bitte getrennt übertragen.".into(),
+            );
         }
         if !paths.insert(path.clone()) {
             return Err("Die gleiche Datei wurde mehrfach ausgewählt.".into());
         }
-        total_bytes = total_bytes.checked_add(metadata.len()).ok_or("Dateiauswahl ist zu groß.")?;
+        total_bytes = total_bytes
+            .checked_add(metadata.len())
+            .ok_or("Dateiauswahl ist zu groß.")?;
         if total_bytes > MAX_ACTION_BYTES {
-            return Err("Die Auswahl überschreitet die Sicherheitsgrenze von 8 GB pro Aktion.".into());
+            return Err(
+                "Die Auswahl überschreitet die Sicherheitsgrenze von 8 GB pro Aktion.".into(),
+            );
         }
         verified.push((path, name, metadata));
     }
@@ -191,7 +242,10 @@ pub(crate) fn preflight_sources(root: &Path, sources: &[PathBuf]) -> Result<Vec<
 fn unique_destination(destination: &Path, file_name: &std::ffi::OsStr) -> Result<PathBuf, String> {
     let path = destination.join(file_name);
     match fs::symlink_metadata(&path) {
-        Ok(_) => Err(format!("Am Ziel existiert bereits „{}“. Es wird nichts überschrieben.", file_name.to_string_lossy())),
+        Ok(_) => Err(format!(
+            "Am Ziel existiert bereits „{}“. Es wird nichts überschrieben.",
+            file_name.to_string_lossy()
+        )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(path),
         Err(error) => Err(format!("Ziel kann nicht geprüft werden: {error}")),
     }
@@ -199,18 +253,26 @@ fn unique_destination(destination: &Path, file_name: &std::ffi::OsStr) -> Result
 
 // Auf Dateisystemen ohne Hardlinks (z. B. manchen USB-Sticks) bleibt
 // create_new der Kollisionsschutz. Unvollständige Zieldateien werden entfernt.
-fn commit_without_overwrite(staged: &Path, destination: &Path, cancel: &AtomicBool) -> Result<(), String> {
+fn commit_without_overwrite(
+    staged: &Path,
+    destination: &Path,
+    cancel: &AtomicBool,
+) -> Result<(), String> {
     cancelled(cancel)?;
     match fs::hard_link(staged, destination) {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            Err("Am Ziel gibt es inzwischen eine Datei mit gleichem Namen. Nichts wurde überschrieben.".into())
-        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(
+            "Am Ziel gibt es inzwischen eine Datei mit gleichem Namen. Nichts wurde überschrieben."
+                .into(),
+        ),
         Err(_) => {
             copy_to_stage(staged, destination, cancel)?;
             let mut new_file_guard = CleanupPath::file(destination.to_path_buf());
             if !compare_contents(staged, destination, cancel)? {
-                return Err("Nachprüfung am Ziellaufwerk fehlgeschlagen; unvollständige Kopie entfernt.".into());
+                return Err(
+                    "Nachprüfung am Ziellaufwerk fehlgeschlagen; unvollständige Kopie entfernt."
+                        .into(),
+                );
             }
             new_file_guard.disarm();
             Ok(())
@@ -230,25 +292,35 @@ fn transfer_one(
     copy_to_stage(source, staged, cancel)?;
     let _cleanup = CleanupPath::file(staged.to_path_buf());
     if !compare_contents(source, staged, cancel)? {
-        return Err("Vorprüfung fehlgeschlagen: Quelle und temporäre Kopie unterscheiden sich.".into());
+        return Err(
+            "Vorprüfung fehlgeschlagen: Quelle und temporäre Kopie unterscheiden sich.".into(),
+        );
     }
     cancelled(cancel)?;
     // Gleicher Zielordner => hard_link ist ein atomarer, nicht überschreibender Commit.
     commit_without_overwrite(staged, destination, cancel)?;
     let mut new_file_guard = CleanupPath::file(destination.to_path_buf());
     if !compare_contents(source, destination, cancel)? {
-        return Err("Nachprüfung fehlgeschlagen. Die Quelldatei wurde nicht gelöscht; bitte Ziel prüfen.".into());
+        return Err(
+            "Nachprüfung fehlgeschlagen. Die Quelldatei wurde nicht gelöscht; bitte Ziel prüfen."
+                .into(),
+        );
     }
     // Ab hier ist die Zielkopie gültig und bleibt selbst dann bestehen,
     // wenn die anschließende Quell-Löschung nicht gelingt.
     new_file_guard.disarm();
     if remove_original {
         cancelled(cancel)?;
-        let current = fs::symlink_metadata(source).map_err(|error| format!("Quelle kann nicht erneut geprüft werden: {error}"))?;
+        let current = fs::symlink_metadata(source)
+            .map_err(|error| format!("Quelle kann nicht erneut geprüft werden: {error}"))?;
         if current.file_type().is_symlink() || !same_file_identity(source_metadata, &current) {
             return Err("Zielkopie ist vorhanden; die Quelle hat sich geändert und wurde daher nicht gelöscht.".into());
         }
-        fs::remove_file(source).map_err(|error| format!("Zielkopie ist vorhanden, aber die Quelle konnte nicht entfernt werden: {error}"))?;
+        fs::remove_file(source).map_err(|error| {
+            format!(
+                "Zielkopie ist vorhanden, aber die Quelle konnte nicht entfernt werden: {error}"
+            )
+        })?;
     }
     Ok(())
 }
@@ -262,7 +334,9 @@ fn wait_for_zip(mut child: Child, cancel: &AtomicBool) -> Result<(), String> {
         }
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(status)) => return Err(format!("ZIP-Programm meldet einen Fehler ({status}).")),
+            Ok(Some(status)) => {
+                return Err(format!("ZIP-Programm meldet einen Fehler ({status})."))
+            }
             Ok(None) => thread::sleep(Duration::from_millis(80)),
             Err(error) => return Err(format!("ZIP-Programm konnte nicht geprüft werden: {error}")),
         }
@@ -277,19 +351,23 @@ fn create_zip<F>(
     cancel: &AtomicBool,
     mut progress: F,
 ) -> Result<ActionOutcome, String>
-where F: FnMut(usize, usize, &str),
+where
+    F: FnMut(usize, usize, &str),
 {
-    let _ = Command::new("zip").arg("-v").output()
-        .map_err(|_| "ZIP benötigt das Programm „zip“. Unter Kubuntu: sudo apt install zip".to_string())?;
+    let _ = Command::new("zip").arg("-v").output().map_err(|_| {
+        "ZIP benötigt das Programm „zip“. Unter Kubuntu: sudo apt install zip".to_string()
+    })?;
     if !valid_name(archive_name) || !archive_name.to_ascii_lowercase().ends_with(".zip") {
         return Err("Bitte einen kurzen Archivnamen mit der Endung .zip angeben.".into());
     }
     let final_path = unique_destination(destination, std::ffi::OsStr::new(archive_name))?;
     let stage_root = destination.join(format!(".dateifinder-{session_id}-zip-staging"));
-    fs::create_dir(&stage_root).map_err(|error| format!("Temporärer ZIP-Ordner konnte nicht angelegt werden: {error}"))?;
+    fs::create_dir(&stage_root)
+        .map_err(|error| format!("Temporärer ZIP-Ordner konnte nicht angelegt werden: {error}"))?;
     let _stage_dir_guard = CleanupPath::directory(stage_root.clone());
     let stage_dir = stage_root.join("inhalte");
-    fs::create_dir(&stage_dir).map_err(|error| format!("ZIP-Inhaltsordner konnte nicht angelegt werden: {error}"))?;
+    fs::create_dir(&stage_dir)
+        .map_err(|error| format!("ZIP-Inhaltsordner konnte nicht angelegt werden: {error}"))?;
     let stage_archive = stage_root.join("archiv.zip");
     for (index, (source, name, _metadata)) in verified.iter().enumerate() {
         let target = stage_dir.join(name);
@@ -302,19 +380,28 @@ where F: FnMut(usize, usize, &str),
     cancelled(cancel)?;
     progress(verified.len(), verified.len(), "ZIP: Archiv wird erstellt");
     let child = Command::new("zip")
-        .arg("-q").arg("-X").arg("-r").arg(&stage_archive).arg(".")
+        .arg("-q")
+        .arg("-X")
+        .arg("-r")
+        .arg(&stage_archive)
+        .arg(".")
         .current_dir(&stage_dir)
-        .spawn().map_err(|error| format!("ZIP konnte nicht gestartet werden: {error}"))?;
+        .spawn()
+        .map_err(|error| format!("ZIP konnte nicht gestartet werden: {error}"))?;
     wait_for_zip(child, cancel)?;
     progress(verified.len(), verified.len(), "ZIP: Archiv wird geprüft");
     let child = Command::new("zip")
-        .arg("-T").arg(&stage_archive)
-        .spawn().map_err(|error| format!("ZIP-Prüfung konnte nicht starten: {error}"))?;
+        .arg("-T")
+        .arg(&stage_archive)
+        .spawn()
+        .map_err(|error| format!("ZIP-Prüfung konnte nicht starten: {error}"))?;
     wait_for_zip(child, cancel)?;
     cancelled(cancel)?;
     commit_without_overwrite(&stage_archive, &final_path, cancel)?;
     let mut final_guard = CleanupPath::file(final_path.clone());
-    let length = fs::metadata(&final_path).map_err(|error| format!("ZIP-Nachprüfung fehlgeschlagen: {error}"))?.len();
+    let length = fs::metadata(&final_path)
+        .map_err(|error| format!("ZIP-Nachprüfung fehlgeschlagen: {error}"))?
+        .len();
     if length == 0 {
         return Err("ZIP-Nachprüfung fehlgeschlagen: Archiv ist leer.".into());
     }
@@ -322,7 +409,10 @@ where F: FnMut(usize, usize, &str),
         return Err("ZIP-Nachprüfung fehlgeschlagen: Archiv am Ziel unterscheidet sich.".into());
     }
     final_guard.disarm();
-    Ok(ActionOutcome { completed: verified.len(), destination: final_path })
+    Ok(ActionOutcome {
+        completed: verified.len(),
+        destination: final_path,
+    })
 }
 
 pub(crate) fn perform_file_action<F>(
@@ -333,19 +423,29 @@ pub(crate) fn perform_file_action<F>(
     cancel: &AtomicBool,
     mut progress: F,
 ) -> Result<ActionOutcome, String>
-where F: FnMut(usize, usize, &str),
+where
+    F: FnMut(usize, usize, &str),
 {
     if !valid_session_id(options.session_id) {
         return Err("Ungültige Aktionskennung.".into());
     }
     cancelled(cancel)?;
     let verified = preflight_sources(root, sources)?;
-    let destination = destination.canonicalize().map_err(|error| format!("Zielordner fehlt: {error}"))?;
+    let destination = destination
+        .canonicalize()
+        .map_err(|error| format!("Zielordner fehlt: {error}"))?;
     if !destination.is_dir() || fs::read_dir(&destination).is_err() {
         return Err("Zielordner ist nicht lesbar oder nicht verfügbar.".into());
     }
     if options.kind == ActionKind::Zip {
-        return create_zip(&verified, &destination, options.archive_name.unwrap_or("DateiFinder-Auswahl.zip"), options.session_id, cancel, progress);
+        return create_zip(
+            &verified,
+            &destination,
+            options.archive_name.unwrap_or("DateiFinder-Auswahl.zip"),
+            options.session_id,
+            cancel,
+            progress,
+        );
     }
     // Vor der ersten Mutation alle Zieldateinamen auf Kollisionen prüfen.
     for (_source, name, _) in &verified {
@@ -355,17 +455,39 @@ where F: FnMut(usize, usize, &str),
     let mut completed = 0usize;
     for (index, (source, name, metadata)) in verified.iter().enumerate() {
         if let Err(error) = cancelled(cancel) {
-            return Err(format!("{completed} von {total} Dateien abgeschlossen. {error}"));
+            return Err(format!(
+                "{completed} von {total} Dateien abgeschlossen. {error}"
+            ));
         }
         let final_path = unique_destination(&destination, name)?;
         let stage = destination.join(format!(".dateifinder-{}-{index}.tmp", options.session_id));
-        if let Err(error) = transfer_one(source, metadata, &final_path, &stage, options.kind == ActionKind::Move, cancel) {
-            return Err(format!("{completed} von {total} Dateien abgeschlossen. {error}"));
+        if let Err(error) = transfer_one(
+            source,
+            metadata,
+            &final_path,
+            &stage,
+            options.kind == ActionKind::Move,
+            cancel,
+        ) {
+            return Err(format!(
+                "{completed} von {total} Dateien abgeschlossen. {error}"
+            ));
         }
         completed += 1;
-        progress(completed, total, if options.kind == ActionKind::Move { "Dateien verschoben" } else { "Dateien kopiert" });
+        progress(
+            completed,
+            total,
+            if options.kind == ActionKind::Move {
+                "Dateien verschoben"
+            } else {
+                "Dateien kopiert"
+            },
+        );
     }
-    Ok(ActionOutcome { completed, destination })
+    Ok(ActionOutcome {
+        completed,
+        destination,
+    })
 }
 
 #[cfg(test)]
@@ -374,7 +496,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn fixture() -> PathBuf {
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
         let path = std::env::temp_dir().join(format!("dateifinder-action-tests-{nanos}"));
         fs::create_dir(&path).expect("create fixture");
         path
@@ -387,9 +512,24 @@ mod tests {
         fs::create_dir(&dest).expect("destination");
         let source = root.join("text.txt");
         fs::write(&source, "Originaldaten").expect("source");
-        let result = perform_file_action(&root, &[source.clone()], &dest, ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "test-copy" }, &AtomicBool::new(false), |_, _, _| {}).expect("copy");
+        let result = perform_file_action(
+            &root,
+            &[source.clone()],
+            &dest,
+            ActionOptions {
+                kind: ActionKind::Copy,
+                archive_name: None,
+                session_id: "test-copy",
+            },
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .expect("copy");
         assert_eq!(result.completed, 1);
-        assert_eq!(fs::read(&source).expect("source"), fs::read(dest.join("text.txt")).expect("target"));
+        assert_eq!(
+            fs::read(&source).expect("source"),
+            fs::read(dest.join("text.txt")).expect("target")
+        );
         assert!(!dest.join(".dateifinder-test-copy-0.tmp").exists());
         fs::remove_dir_all(root).expect("cleanup test");
     }
@@ -401,9 +541,24 @@ mod tests {
         fs::create_dir(&dest).expect("destination");
         let source = root.join("text.txt");
         fs::write(&source, "Originaldaten").expect("source");
-        perform_file_action(&root, &[source.clone()], &dest, ActionOptions { kind: ActionKind::Move, archive_name: None, session_id: "test-move" }, &AtomicBool::new(false), |_, _, _| {}).expect("move");
+        perform_file_action(
+            &root,
+            &[source.clone()],
+            &dest,
+            ActionOptions {
+                kind: ActionKind::Move,
+                archive_name: None,
+                session_id: "test-move",
+            },
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .expect("move");
         assert!(!source.exists());
-        assert_eq!(fs::read(dest.join("text.txt")).expect("target"), b"Originaldaten");
+        assert_eq!(
+            fs::read(dest.join("text.txt")).expect("target"),
+            b"Originaldaten"
+        );
         fs::remove_dir_all(root).expect("cleanup test");
     }
 
@@ -415,11 +570,38 @@ mod tests {
         let source = root.join("text.txt");
         fs::write(&source, "Quelle").expect("source");
         fs::write(dest.join("text.txt"), "Ziel bleibt").expect("existing target");
-        assert!(perform_file_action(&root, &[source.clone()], &dest, ActionOptions { kind: ActionKind::Move, archive_name: None, session_id: "test-collision" }, &AtomicBool::new(false), |_, _, _| {}).is_err());
+        assert!(perform_file_action(
+            &root,
+            &[source.clone()],
+            &dest,
+            ActionOptions {
+                kind: ActionKind::Move,
+                archive_name: None,
+                session_id: "test-collision"
+            },
+            &AtomicBool::new(false),
+            |_, _, _| {}
+        )
+        .is_err());
         assert_eq!(fs::read(&source).expect("source"), b"Quelle");
-        assert_eq!(fs::read(dest.join("text.txt")).expect("target"), b"Ziel bleibt");
+        assert_eq!(
+            fs::read(dest.join("text.txt")).expect("target"),
+            b"Ziel bleibt"
+        );
         let flag = AtomicBool::new(true);
-        assert!(perform_file_action(&root, &[source.clone()], &dest, ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "test-cancel" }, &flag, |_, _, _| {}).is_err());
+        assert!(perform_file_action(
+            &root,
+            &[source.clone()],
+            &dest,
+            ActionOptions {
+                kind: ActionKind::Copy,
+                archive_name: None,
+                session_id: "test-cancel"
+            },
+            &flag,
+            |_, _, _| {}
+        )
+        .is_err());
         assert_eq!(fs::read(&source).expect("source"), b"Quelle");
         fs::remove_dir_all(root).expect("cleanup test");
     }
@@ -438,14 +620,25 @@ mod tests {
             &root,
             &[first.clone(), second.clone()],
             &dest,
-            ActionOptions { kind: ActionKind::Move, archive_name: None, session_id: "partial" },
+            ActionOptions {
+                kind: ActionKind::Move,
+                archive_name: None,
+                session_id: "partial",
+            },
             &flag,
-            |count, _, _| { if count == 1 { flag.store(true, Ordering::Relaxed); } },
+            |count, _, _| {
+                if count == 1 {
+                    flag.store(true, Ordering::Relaxed);
+                }
+            },
         );
         assert!(result.expect_err("cancel expected").contains("1 von 2"));
         assert!(!first.exists());
         assert!(second.exists());
-        assert_eq!(fs::read(dest.join("eins.txt")).expect("completed"), b"Datei eins");
+        assert_eq!(
+            fs::read(dest.join("eins.txt")).expect("completed"),
+            b"Datei eins"
+        );
         assert!(!dest.join("zwei.txt").exists());
         assert!(!dest.join(".dateifinder-partial-1.tmp").exists());
         fs::remove_dir_all(root).expect("cleanup test");
@@ -468,7 +661,11 @@ mod tests {
             &root,
             &[first.clone(), second.clone()],
             &dest,
-            ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "duplicate" },
+            ActionOptions {
+                kind: ActionKind::Copy,
+                archive_name: None,
+                session_id: "duplicate",
+            },
             &AtomicBool::new(false),
             |_, _, _| {},
         );
@@ -480,15 +677,35 @@ mod tests {
 
     #[test]
     fn zip_archive_is_tested_and_stage_data_removed() {
-        if Command::new("zip").arg("-v").output().is_err() { return; }
+        if Command::new("zip").arg("-v").output().is_err() {
+            return;
+        }
         let root = fixture();
         let dest = root.join("ziel");
         fs::create_dir(&dest).expect("destination");
         let source = root.join("text.txt");
         fs::write(&source, "Archivinhalt").expect("source");
-        let result = perform_file_action(&root, &[source.clone()], &dest, ActionOptions { kind: ActionKind::Zip, archive_name: Some("auswahl.zip"), session_id: "test-zip" }, &AtomicBool::new(false), |_, _, _| {}).expect("zip");
+        let result = perform_file_action(
+            &root,
+            &[source.clone()],
+            &dest,
+            ActionOptions {
+                kind: ActionKind::Zip,
+                archive_name: Some("auswahl.zip"),
+                session_id: "test-zip",
+            },
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        )
+        .expect("zip");
         assert_eq!(result.completed, 1);
-        assert!(dest.join("auswahl.zip").metadata().expect("zip metadata").len() > 0);
+        assert!(
+            dest.join("auswahl.zip")
+                .metadata()
+                .expect("zip metadata")
+                .len()
+                > 0
+        );
         assert!(source.exists());
         assert!(!dest.join(".dateifinder-test-zip-zip-staging").exists());
         fs::remove_dir_all(root).expect("cleanup test");
@@ -503,7 +720,18 @@ mod tests {
         let outside = fixture();
         let source = outside.join("secret.txt");
         fs::write(&source, "secret").expect("source");
-        let result = perform_file_action(&root, &[source], &root, ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "test-escape" }, &AtomicBool::new(false), |_, _, _| {});
+        let result = perform_file_action(
+            &root,
+            &[source],
+            &root,
+            ActionOptions {
+                kind: ActionKind::Copy,
+                archive_name: None,
+                session_id: "test-escape",
+            },
+            &AtomicBool::new(false),
+            |_, _, _| {},
+        );
         assert!(result.is_err());
         fs::remove_dir_all(root).expect("cleanup root");
         fs::remove_dir_all(outside).expect("cleanup outside");

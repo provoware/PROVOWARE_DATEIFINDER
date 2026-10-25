@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 mod file_actions;
-use file_actions::{perform_file_action, valid_name, valid_session_id, ActionKind, ActionOptions, MAX_ACTION_FILES};
+use file_actions::{
+    perform_file_action, valid_name, valid_session_id, ActionKind, ActionOptions, MAX_ACTION_FILES,
+};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
     ffi::OsString,
@@ -846,43 +848,73 @@ async fn execute_file_action(
     if request.path_keys.is_empty() || request.path_keys.len() > MAX_ACTION_FILES {
         return Err(format!("Bitte 1 bis {MAX_ACTION_FILES} Dateien auswählen."));
     }
-    if search_registry.0.lock().map_err(|_| "Suchstatus blockiert.")?.len() > 0 {
+    if search_registry
+        .0
+        .lock()
+        .map_err(|_| "Suchstatus blockiert.")?
+        .len()
+        > 0
+    {
         return Err("Bitte die laufende Suche vor Dateiaktionen beenden.".into());
     }
     let kind = ActionKind::parse(&request.action)?;
     if let Some(name) = &request.new_folder_name {
-        if !valid_name(name) { return Err("Ungültiger neuer Ordnername.".into()); }
+        if !valid_name(name) {
+            return Err("Ungültiger neuer Ordnername.".into());
+        }
     }
     if kind == ActionKind::Zip {
-        let name = request.archive_name.as_deref().unwrap_or("DateiFinder-Auswahl.zip");
+        let name = request
+            .archive_name
+            .as_deref()
+            .unwrap_or("DateiFinder-Auswahl.zip");
         if !valid_name(name) || !name.to_ascii_lowercase().ends_with(".zip") {
             return Err("Ungültiger ZIP-Archivname.".into());
         }
     }
     let root = decode_path(&request.root_path_key)?
-        .canonicalize().map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
-    let is_allowed = allowed_roots.0.lock().map_err(|_| "Berechtigungsstatus blockiert.")?
+        .canonicalize()
+        .map_err(|error| format!("Suchort ist nicht verfügbar: {error}"))?;
+    let is_allowed = allowed_roots
+        .0
+        .lock()
+        .map_err(|_| "Berechtigungsstatus blockiert.")?
         .contains(&root);
-    if !is_allowed { return Err("Der Suchort ist nicht freigegeben.".into()); }
-    let sources: Vec<PathBuf> = request.path_keys.iter()
+    if !is_allowed {
+        return Err("Der Suchort ist nicht freigegeben.".into());
+    }
+    let sources: Vec<PathBuf> = request
+        .path_keys
+        .iter()
         .map(|key| validated_allowed_file(&allowed_roots, &request.root_path_key, key))
         .collect::<Result<_, _>>()?;
     file_actions::preflight_sources(&root, &sources)?;
 
-    let selected = app.dialog().file()
+    let selected = app
+        .dialog()
+        .file()
         .set_title("Zielordner für Dateiaktion auswählen")
         .blocking_pick_folder();
-    let Some(selected) = selected else { return Ok(None); };
-    let chosen = selected.into_path()
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    let chosen = selected
+        .into_path()
         .map_err(|error| format!("Zielordner ist kein lokaler Pfad: {error}"))?;
-    let destination = chosen.canonicalize()
+    let destination = chosen
+        .canonicalize()
         .map_err(|error| format!("Zielordner kann nicht geöffnet werden: {error}"))?;
     if !destination.is_dir() || fs::read_dir(&destination).is_err() {
         return Err("Zielordner ist nicht lesbar.".into());
     }
 
-    let mut active = registry.0.lock().map_err(|_| "Dateiaktionsstatus blockiert.")?;
-    if !active.is_empty() { return Err("Es läuft bereits eine Dateiaktion. Bitte warten oder abbrechen.".into()); }
+    let mut active = registry
+        .0
+        .lock()
+        .map_err(|_| "Dateiaktionsstatus blockiert.")?;
+    if !active.is_empty() {
+        return Err("Es läuft bereits eine Dateiaktion. Bitte warten oder abbrechen.".into());
+    }
     let flag = Arc::new(AtomicBool::new(false));
     active.insert(request.session_id.clone(), flag.clone());
     drop(active);
@@ -895,19 +927,33 @@ async fn execute_file_action(
     let operation = tauri::async_runtime::spawn_blocking(move || {
         let actual_destination = if let Some(folder_name) = new_folder_name {
             let path = destination.join(folder_name);
-            fs::create_dir(&path).map_err(|error| format!("Neuer Zielordner konnte nicht angelegt werden: {error}"))?;
+            fs::create_dir(&path).map_err(|error| {
+                format!("Neuer Zielordner konnte nicht angelegt werden: {error}")
+            })?;
             path
-        } else { destination.clone() };
+        } else {
+            destination.clone()
+        };
         let result = perform_file_action(
             &root,
             &sources,
             &actual_destination,
-            ActionOptions { kind, archive_name: archive_name.as_deref(), session_id: &session },
+            ActionOptions {
+                kind,
+                archive_name: archive_name.as_deref(),
+                session_id: &session,
+            },
             &flag,
             |completed, total, phase| {
-                let _ = app_for_progress.emit("file-action-progress", FileActionProgress {
-                    session_id: callback_session.clone(), completed, total, phase: phase.into(),
-                });
+                let _ = app_for_progress.emit(
+                    "file-action-progress",
+                    FileActionProgress {
+                        session_id: callback_session.clone(),
+                        completed,
+                        total,
+                        phase: phase.into(),
+                    },
+                );
             },
         );
         // Ein frisch angelegter, noch leerer Unterordner wird bei Fehlern entfernt.
@@ -916,9 +962,13 @@ async fn execute_file_action(
             let _ = fs::remove_dir(&actual_destination);
         }
         result
-    }).await;
-    if let Ok(mut active) = registry.0.lock() { active.remove(&request.session_id); }
-    let outcome = operation.map_err(|error| format!("Dateiaktion konnte nicht abgeschlossen werden: {error}"))??;
+    })
+    .await;
+    if let Ok(mut active) = registry.0.lock() {
+        active.remove(&request.session_id);
+    }
+    let outcome = operation
+        .map_err(|error| format!("Dateiaktion konnte nicht abgeschlossen werden: {error}"))??;
     Ok(Some(FileActionResult {
         completed: outcome.completed,
         destination: outcome.destination.to_string_lossy().into_owned(),
@@ -926,8 +976,14 @@ async fn execute_file_action(
 }
 
 #[tauri::command]
-fn cancel_file_action(registry: State<'_, FileActionRegistry>, session_id: String) -> Result<(), String> {
-    let active = registry.0.lock().map_err(|_| "Dateiaktionsstatus blockiert.")?;
+fn cancel_file_action(
+    registry: State<'_, FileActionRegistry>,
+    session_id: String,
+) -> Result<(), String> {
+    let active = registry
+        .0
+        .lock()
+        .map_err(|_| "Dateiaktionsstatus blockiert.")?;
     if let Some(flag) = active.get(&session_id) {
         flag.store(true, Ordering::Relaxed);
     }

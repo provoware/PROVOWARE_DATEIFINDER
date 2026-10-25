@@ -979,7 +979,10 @@ function showFileAction(kind: FileActionKind): void {
 }
 
 function showFileActionProgress(completed: number, total: number, phase: string): void {
-  const percent = total > 0 ? Math.min(100, Math.round(100 * completed / total)) : 0;
+  const percent = phase === "ZIP: Archiv wird geprüft" ? 95
+    : phase === "ZIP: Archiv wird erstellt" ? 85
+      : phase === "ZIP: Dateien vorbereitet" ? Math.min(80, Math.round(80 * completed / Math.max(1, total)))
+        : total > 0 ? Math.min(100, Math.round(100 * completed / total)) : 0;
   ui.fileActionProgress.hidden = false;
   ui.fileActionProgress.setAttribute("aria-valuenow", String(percent));
   ui.fileActionProgress.setAttribute("aria-valuetext", `${completed} von ${total} Dateien · ${phase}`);
@@ -1031,6 +1034,10 @@ async function startFileAction(): Promise<void> {
       ui.fileActionFeedback.textContent = "Zielauswahl abgebrochen. Keine Datei verändert.";
       setStatus("Dateiaktion nicht gestartet", "Es wurde kein Zielordner gewählt.");
     } else {
+      ui.fileActionProgress.hidden = false;
+      ui.fileActionProgress.setAttribute("aria-valuenow", "100");
+      ui.fileActionProgress.setAttribute("aria-valuetext", "Erfolgreich abgeschlossen und geprüft");
+      ui.fileActionProgressBar.style.width = "100%";
       ui.fileActionFeedback.textContent = `✓ ${result.completed} Datei(en) erfolgreich geprüft und gespeichert: ${result.destination}`;
       setStatus("Dateiaktion abgeschlossen", `${result.completed} Datei(en) · ${result.destination}`);
       if (selectedAction === "move") {
