@@ -848,12 +848,11 @@ async fn execute_file_action(
     if request.path_keys.is_empty() || request.path_keys.len() > MAX_ACTION_FILES {
         return Err(format!("Bitte 1 bis {MAX_ACTION_FILES} Dateien auswählen."));
     }
-    if search_registry
+    if !search_registry
         .0
         .lock()
         .map_err(|_| "Suchstatus blockiert.")?
-        .len()
-        > 0
+        .is_empty()
     {
         return Err("Bitte die laufende Suche vor Dateiaktionen beenden.".into());
     }

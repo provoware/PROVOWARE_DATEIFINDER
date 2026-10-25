@@ -1051,8 +1051,21 @@ async function startFileAction(): Promise<void> {
       for (const file of files) state.selectedIds.delete(file.id);
     }
   } catch (error) {
-    ui.fileActionFeedback.textContent = `⚠ ${safeMessage(error)} Bitte Ergebnis und Originale prüfen. Bereits abgeschlossene Dateien bleiben erhalten.`;
-    setStatus("Dateiaktion nicht vollständig", safeMessage(error), "warning");
+    const message = safeMessage(error);
+    const partial = selectedAction === "move" ? /^(\d+) von \d+ Dateien abgeschlossen\./.exec(message) : null;
+    const completed = partial ? Number(partial[1]) : 0;
+    if (completed > 0 && completed <= files.length) {
+      // Nur bestätigte Teilabschlüsse ausblenden, damit keine ungültigen
+      // Originalpfade in der Trefferliste stehen bleiben.
+      const completedIds = new Set(files.slice(0, completed).map((file) => file.id));
+      state.results = state.results.filter((file) => !completedIds.has(file.id));
+      for (const id of completedIds) state.selectedIds.delete(id);
+      findingsStats = createFindingsStats();
+      addFindingsBatch(findingsStats, state.results);
+      state.previewId = null;
+    }
+    ui.fileActionFeedback.textContent = `⚠ ${message} Originale und Ziel bitte prüfen.${completed > 0 ? " Bereits verschobene Treffer wurden aus der Liste genommen." : ""} Suche anschließend erneut starten.`;
+    setStatus("Dateiaktion nicht vollständig", message, "warning");
   } finally {
     activeFileActionSession = null;
     state.fileActionBusy = false;

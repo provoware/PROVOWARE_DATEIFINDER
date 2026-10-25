@@ -178,7 +178,13 @@ fn copy_to_stage(source: &Path, target: &Path, cancel: &AtomicBool) -> Result<()
 #[cfg(unix)]
 fn same_file_identity(before: &Metadata, after: &Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
-    before.dev() == after.dev() && before.ino() == after.ino() && before.len() == after.len()
+    before.dev() == after.dev()
+        && before.ino() == after.ino()
+        && before.len() == after.len()
+        && before.mtime() == after.mtime()
+        && before.mtime_nsec() == after.mtime_nsec()
+        && before.ctime() == after.ctime()
+        && before.ctime_nsec() == after.ctime_nsec()
 }
 
 #[cfg(not(unix))]
@@ -514,7 +520,7 @@ mod tests {
         fs::write(&source, "Originaldaten").expect("source");
         let result = perform_file_action(
             &root,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             &dest,
             ActionOptions {
                 kind: ActionKind::Copy,
@@ -543,7 +549,7 @@ mod tests {
         fs::write(&source, "Originaldaten").expect("source");
         perform_file_action(
             &root,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             &dest,
             ActionOptions {
                 kind: ActionKind::Move,
@@ -572,7 +578,7 @@ mod tests {
         fs::write(dest.join("text.txt"), "Ziel bleibt").expect("existing target");
         assert!(perform_file_action(
             &root,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             &dest,
             ActionOptions {
                 kind: ActionKind::Move,
@@ -591,7 +597,7 @@ mod tests {
         let flag = AtomicBool::new(true);
         assert!(perform_file_action(
             &root,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             &dest,
             ActionOptions {
                 kind: ActionKind::Copy,
@@ -687,7 +693,7 @@ mod tests {
         fs::write(&source, "Archivinhalt").expect("source");
         let result = perform_file_action(
             &root,
-            &[source.clone()],
+            std::slice::from_ref(&source),
             &dest,
             ActionOptions {
                 kind: ActionKind::Zip,
