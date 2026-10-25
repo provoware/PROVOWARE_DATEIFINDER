@@ -872,7 +872,7 @@ mod tests {
         assert!(injected);
         assert!(result.is_err());
         assert!(source.exists());
-        assert_eq!(fs::read(&destination).expect("other data"), b"Nicht überschreiben");
+        assert_eq!(fs::read(&destination).expect("other data"), "Nicht überschreiben".as_bytes());
         assert!(!dest.join(".dateifinder-collision-race-0.tmp").exists());
         fs::remove_dir_all(root).expect("cleanup fixture");
     }
