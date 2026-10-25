@@ -2,7 +2,10 @@ import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
+import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -35,6 +38,7 @@ interface SearchRequest {
   query: string;
   matchMode: MatchMode;
   fileTypes: FileKind[];
+  searchContents: boolean;
   batchSize: number;
   maxResults: number;
 }
@@ -72,6 +76,7 @@ interface AppState {
   query: string;
   matchMode: MatchMode;
   fileTypes: Set<FileKind>;
+  searchContents: boolean;
   sourcePath: string | null;
   sourcePathKey: string | null;
   sourceLabel: string;
@@ -95,6 +100,7 @@ const initialState: AppState = {
   query: "",
   matchMode: "all",
   fileTypes: new Set<FileKind>(),
+  searchContents: false,
   sourcePath: null,
   sourcePathKey: null,
   sourceLabel: "Ordner wählen",
@@ -217,6 +223,11 @@ interface BrowserTestAdapter {
   startSearch(request: SearchRequest): Promise<void>;
   cancelSearch(sessionId: string): Promise<void>;
   listenSearchEvents(listeners: SearchListeners): Promise<UnlistenFn[]>;
+  inspectSavedRoot(path: string): Promise<boolean>;
+  restoreSavedRoot(path: string): Promise<PickedRoot>;
+  previewText(rootPathKey: string, pathKey: string): Promise<string>;
+  importSearchPresets(): Promise<string | null>;
+  exportSearchPresets(contents: string): Promise<boolean>;
 }
 
 declare global {
@@ -236,6 +247,31 @@ async function getPlatformCapabilities(): Promise<PlatformCapabilities> {
 async function pickDirectory(): Promise<PickedRoot | null> {
   if (browserTestAdapter?.pickDirectory) return browserTestAdapter.pickDirectory();
   return invoke<PickedRoot | null>("pick_search_root");
+}
+
+async function inspectSavedRoot(path: string): Promise<boolean> {
+  if (browserTestAdapter?.inspectSavedRoot) return browserTestAdapter.inspectSavedRoot(path);
+  return invoke<boolean>("inspect_saved_root", { path });
+}
+
+async function restoreSavedRoot(path: string): Promise<PickedRoot> {
+  if (browserTestAdapter?.restoreSavedRoot) return browserTestAdapter.restoreSavedRoot(path);
+  return invoke<PickedRoot>("restore_saved_root", { path });
+}
+
+async function previewText(rootPathKey: string, pathKey: string): Promise<string> {
+  if (browserTestAdapter?.previewText) return browserTestAdapter.previewText(rootPathKey, pathKey);
+  return invoke<string>("preview_text", { rootPathKey, pathKey });
+}
+
+async function importSearchPresets(): Promise<string | null> {
+  if (browserTestAdapter?.importSearchPresets) return browserTestAdapter.importSearchPresets();
+  return invoke<string | null>("import_search_presets");
+}
+
+async function exportSearchPresets(contents: string): Promise<boolean> {
+  if (browserTestAdapter?.exportSearchPresets) return browserTestAdapter.exportSearchPresets(contents);
+  return invoke<boolean>("export_search_presets", { contents });
 }
 
 async function startSearch(request: SearchRequest): Promise<void> {
@@ -314,6 +350,12 @@ const DEFAULT_RESULT_ROW_HEIGHT = 40;
 let resultRenderScheduled = false;
 let virtualRenderScheduled = false;
 let progressTimer: number | null = null;
+let findingsStats = createFindingsStats();
+let insightsMode: InsightMode = "type";
+let insightsOpen = false;
+let searchPresets: SearchPreset[] = [];
+let currentZoom = 1;
+let lastPreviewRequest = "";
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -325,6 +367,7 @@ const ui = {
   form: byId<HTMLFormElement>("search-form"),
   query: byId<HTMLInputElement>("query-input"),
   matchMode: byId<HTMLSelectElement>("match-mode-select"),
+  searchScopeNote: byId<HTMLElement>("search-scope-note"),
   fileTypeButtons: [...document.querySelectorAll<HTMLButtonElement>("[data-file-type]")],
   sourceLabel: byId<HTMLElement>("source-label"),
   sourceNav: byId<HTMLButtonElement>("choose-source-nav"),
@@ -332,6 +375,12 @@ const ui = {
   results: byId<HTMLElement>("results-list"),
   resultCount: byId<HTMLElement>("result-count"),
   resultLimitNotice: byId<HTMLElement>("result-limit-notice"),
+  insightsToggle: byId<HTMLButtonElement>("insights-toggle"),
+  insightsPanel: byId<HTMLElement>("insights-panel"),
+  insightsMode: byId<HTMLSelectElement>("insights-mode"),
+  insightsTotal: byId<HTMLElement>("insights-total"),
+  insightsChart: byId<HTMLElement>("insights-chart"),
+  insightsLegend: byId<HTMLElement>("insights-legend"),
   empty: byId<HTMLElement>("empty-state"),
   emptyTitle: byId<HTMLElement>("empty-title"),
   emptyDetail: byId<HTMLElement>("empty-detail"),
@@ -356,11 +405,30 @@ const ui = {
   settingsDialog: byId<HTMLDialogElement>("settings-dialog"),
   settingsTheme: byId<HTMLSelectElement>("settings-theme-select"),
   settingsMatch: byId<HTMLSelectElement>("settings-match-select"),
+  settingsZoom: byId<HTMLSelectElement>("settings-zoom"),
+  settingsContentSearch: byId<HTMLInputElement>("settings-content-search"),
+  presetsQuick: byId<HTMLButtonElement>("presets-quick"),
+  presetName: byId<HTMLInputElement>("preset-name"),
+  presetSelect: byId<HTMLSelectElement>("preset-select"),
+  presetSave: byId<HTMLButtonElement>("preset-save"),
+  presetLoad: byId<HTMLButtonElement>("preset-load"),
+  presetDelete: byId<HTMLButtonElement>("preset-delete"),
+  presetImport: byId<HTMLButtonElement>("preset-import"),
+  presetExport: byId<HTMLButtonElement>("preset-export"),
+  presetFeedback: byId<HTMLElement>("preset-feedback"),
+  returnDialog: byId<HTMLDialogElement>("return-dialog"),
+  returnPath: byId<HTMLElement>("return-path"),
+  returnDetail: byId<HTMLElement>("return-detail"),
+  returnUse: byId<HTMLButtonElement>("return-use"),
+  returnChange: byId<HTMLButtonElement>("return-change"),
+  returnLater: byId<HTMLButtonElement>("return-later"),
   searchHelp: byId<HTMLDialogElement>("search-help-dialog"),
   previewName: byId<HTMLElement>("preview-name"),
   previewVisual: byId<HTMLElement>("preview-visual"),
+  textPreview: byId<HTMLElement>("text-preview"),
   previewSummary: byId<HTMLElement>("preview-summary"),
   previewPath: byId<HTMLElement>("preview-path"),
+  copyPath: byId<HTMLButtonElement>("copy-path"),
   previewSize: byId<HTMLElement>("preview-size"),
   previewModified: byId<HTMLElement>("preview-modified"),
   previewKind: byId<HTMLElement>("preview-kind"),
@@ -398,12 +466,72 @@ const kindLabels: Record<FileKind, string> = {
   text: "Sonstige",
 };
 
+function showSavedPresets(): void {
+  if (!ui.settingsDialog.open) ui.settingsDialog.showModal();
+  ui.presetName.focus();
+}
+
+function renderPresets(selectedName?: string): void {
+  const previous = selectedName ?? ui.presetSelect.value;
+  ui.presetSelect.replaceChildren();
+  const placeholder = new Option(searchPresets.length ? "Vorlage auswählen" : "Noch keine Vorlage", "");
+  ui.presetSelect.add(placeholder);
+  for (const preset of searchPresets) ui.presetSelect.add(new Option(preset.name, preset.name));
+  ui.presetSelect.value = searchPresets.some((preset) => preset.name === previous) ? previous : "";
+  ui.presetLoad.disabled = !ui.presetSelect.value || state.searching;
+  ui.presetDelete.disabled = !ui.presetSelect.value;
+  ui.presetExport.disabled = searchPresets.length === 0;
+  ui.presetSave.disabled = state.searching;
+  ui.presetsQuick.hidden = searchPresets.length === 0;
+}
+
+async function persistPresets(): Promise<void> {
+  await settings.set("searchPresets", searchPresets);
+  await settings.save();
+}
+
+function applyPreset(preset: SearchPreset): void {
+  if (state.searching) return;
+  ui.query.value = preset.query;
+  state.query = preset.query;
+  state.matchMode = preset.matchMode;
+  state.fileTypes = new Set(preset.fileTypes);
+  renderSearchOptions();
+  renderMetrics();
+  ui.settingsDialog.close();
+  ui.query.focus();
+  setStatus("Suchvorlage geladen", `„${preset.name}“ ist bereit. Zum Suchen auf „Suchen“ klicken.`);
+}
+
+async function changeZoom(value: number): Promise<void> {
+  const next = normalizeZoom(value);
+  if (next === currentZoom) return;
+  try {
+    if (browserTestAdapter) document.documentElement.style.zoom = String(next);
+    else await getCurrentWebview().setZoom(next);
+    currentZoom = next;
+    ui.settingsZoom.value = String(next);
+    scheduleVirtualRender();
+  } catch (error) {
+    ui.settingsZoom.value = String(currentZoom);
+    setStatus("Zoom nicht verfügbar", safeMessage(error), "warning");
+    return;
+  }
+  void settings.set("zoom", next).then(() => settings.save())
+    .catch((error) => console.warn("Zoom konnte nicht dauerhaft gespeichert werden", error));
+}
+
 function renderSearchOptions(): void {
   ui.matchMode.value = state.matchMode;
   ui.matchMode.disabled = state.searching;
   ui.settingsMatch.value = state.matchMode;
   ui.settingsMatch.disabled = state.searching;
   ui.settingsTheme.value = state.theme;
+  ui.settingsContentSearch.checked = state.searchContents;
+  ui.settingsContentSearch.disabled = state.searching;
+  ui.searchScopeNote.textContent = state.searchContents
+    ? "Dateinamen + Textdateien bis 256 KB"
+    : "Dateinamen · Unterordner inklusive";
   for (const button of ui.fileTypeButtons) {
     const kind = button.dataset.fileType;
     const selected = kind === "all" ? state.fileTypes.size === 0 : state.fileTypes.has(kind as FileKind);
@@ -422,6 +550,50 @@ function renderMetrics(): void {
   const types = [...state.fileTypes].map((kind) => kindLabels[kind]);
   ui.metricFilter.textContent = types.length > 0 ? types.join(", ") : "Alle Typen";
   ui.metricFilter.title = `${ui.metricFilter.textContent} · ${state.matchMode === "all" ? "alle Wörter" : "mindestens ein Wort"}`;
+  if (state.searchContents) ui.metricFilter.title += " · Inhaltssuche aktiv (Text bis 256 KB)";
+}
+
+function renderInsights(): void {
+  const hasFindings = findingsStats.total > 0;
+  ui.insightsToggle.hidden = !hasFindings;
+  ui.insightsToggle.setAttribute("aria-expanded", String(hasFindings && insightsOpen));
+  ui.insightsPanel.hidden = !hasFindings || !insightsOpen;
+  if (!hasFindings || !insightsOpen) return;
+
+  ui.insightsMode.value = insightsMode;
+  const prefix = state.searching ? "Zwischenstand" : state.limitReached ? "Begrenzt" : "Angezeigt";
+  ui.insightsTotal.textContent = `${prefix}: ${findingsStats.total.toLocaleString("de-DE")} · ${formatBytes(findingsStats.totalBytes)}`;
+
+  const groups = insightGroups(findingsStats, insightsMode);
+  const segments: HTMLElement[] = [];
+  const legend: HTMLLIElement[] = [];
+  for (const group of groups) {
+    const percent = (group.count / findingsStats.total) * 100;
+    const description = `${group.label}: ${group.count.toLocaleString("de-DE")} (${percent.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %)`;
+    const segment = document.createElement("span");
+    segment.className = "insights-chart-segment";
+    segment.style.flex = `0 0 ${percent}%`;
+    segment.style.backgroundColor = group.color;
+    segment.title = description;
+    segment.setAttribute("aria-hidden", "true");
+    segments.push(segment);
+
+    const item = document.createElement("li");
+    const swatch = document.createElement("span");
+    swatch.className = "insights-legend-swatch";
+    swatch.style.backgroundColor = group.color;
+    swatch.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = `${group.label} `;
+    const count = document.createElement("strong");
+    count.textContent = group.count.toLocaleString("de-DE");
+    item.append(swatch, label, count);
+    item.title = description;
+    legend.push(item);
+  }
+  ui.insightsChart.replaceChildren(...segments);
+  ui.insightsChart.setAttribute("aria-label", `${findingsStats.total.toLocaleString("de-DE")} angezeigte Treffer: ${groups.map((group) => `${group.label} ${group.count}`).join(", ")}`);
+  ui.insightsLegend.replaceChildren(...legend);
 }
 
 function stopProgressTimer(): void {
@@ -454,12 +626,17 @@ function selectedFiles(): FileEntry[] {
 function renderPreview(): void {
   const file = currentPreview();
   if (!file) {
+    lastPreviewRequest = "";
+    ui.previewVisual.hidden = false;
+    ui.textPreview.hidden = true;
+    ui.textPreview.textContent = "";
     ui.previewVisual.dataset.kind = "empty";
     ui.previewVisual.dataset.symbol = "⌕";
     ui.previewVisual.dataset.caption = "Datei auswählen";
     ui.previewName.textContent = "Keine Datei ausgewählt";
     ui.previewSummary.textContent = "Wähle einen Treffer aus, um Dateidetails zu sehen.";
     ui.previewPath.textContent = "–";
+    ui.copyPath.hidden = true;
     ui.previewSize.textContent = "–";
     ui.previewModified.textContent = "–";
     ui.previewKind.textContent = "–";
@@ -475,9 +652,31 @@ function renderPreview(): void {
   ui.previewName.textContent = file.displayName;
   ui.previewSummary.textContent = `${kindName} · ${formatBytes(file.sizeBytes)}`;
   ui.previewPath.textContent = file.path;
+  ui.copyPath.hidden = false;
   ui.previewSize.textContent = formatBytes(file.sizeBytes);
   ui.previewModified.textContent = formatDate(file.modifiedAt);
   ui.previewKind.textContent = file.extension ? file.extension.toUpperCase() : file.kind;
+
+  const previewable = new Set(["txt", "md", "csv", "json", "log", "ini", "toml", "yaml", "yml", "xml", "html", "htm", "css", "js", "ts", "py", "rs", "sh", "conf"])
+    .has(file.extension.toLowerCase());
+  ui.previewVisual.hidden = previewable;
+  ui.textPreview.hidden = !previewable;
+  if (previewable && state.sourcePathKey) {
+    const rootKey = state.sourcePathKey;
+    const requestKey = `${rootKey}|${file.pathKey}`;
+    if (lastPreviewRequest !== requestKey) {
+      lastPreviewRequest = requestKey;
+      ui.textPreview.textContent = "Textvorschau wird geladen …";
+      void previewText(rootKey, file.pathKey).then((content) => {
+        if (lastPreviewRequest !== requestKey) return;
+        ui.textPreview.textContent = content.length > 20_000
+          ? `${content.slice(0, 20_000)}\n\n… Vorschau auf 20.000 Zeichen gekürzt.`
+          : content || "Diese Datei ist leer.";
+      }).catch((error) => {
+        if (lastPreviewRequest === requestKey) ui.textPreview.textContent = `Textvorschau nicht verfügbar: ${safeMessage(error)}`;
+      });
+    }
+  }
 }
 
 function renderEmptyState(): void {
@@ -647,6 +846,7 @@ function renderResults(): void {
   ui.export.title = state.limitReached ? "Die gespeicherte Liste ist unvollständig, weil die Treffergrenze erreicht wurde." : "";
   renderPreview();
   renderMetrics();
+  renderInsights();
 }
 
 function scheduleRenderResults(): void {
@@ -673,6 +873,7 @@ function render(): void {
   ui.sourceLabel.textContent = state.sourceLabel;
   ui.cancel.disabled = !state.searching;
   renderSearchOptions();
+  renderPresets();
   renderResults();
 }
 
@@ -690,21 +891,7 @@ async function chooseSource(): Promise<void> {
     if (state.platform.canPickFolder) {
       const root = await pickDirectory();
       if (!root) return;
-      state.results = [];
-      state.selectedIds.clear();
-      state.previewId = null;
-      state.scannedCount = 0;
-      state.elapsedMs = 0;
-      state.skippedCount = 0;
-      state.limitReached = false;
-      state.lastSearchStatus = "not-started";
-      ui.results.scrollTop = 0;
-      state.sourcePath = root.path;
-      state.sourcePathKey = root.pathKey;
-      state.sourceLabel = root.path.split(/[\\/]/).filter(Boolean).at(-1) ?? root.path;
-      setStatus("Suchort gewählt", state.sourceLabel);
-      render();
-      ui.query.focus();
+      useSourceRoot(root);
       return;
     }
 
@@ -712,6 +899,27 @@ async function chooseSource(): Promise<void> {
   } catch (error) {
     setStatus("Quelle konnte nicht geöffnet werden", safeMessage(error), "error");
   }
+}
+
+function useSourceRoot(root: PickedRoot): void {
+  state.results = [];
+  findingsStats = createFindingsStats();
+  state.selectedIds.clear();
+  state.previewId = null;
+  state.scannedCount = 0;
+  state.elapsedMs = 0;
+  state.skippedCount = 0;
+  state.limitReached = false;
+  state.lastSearchStatus = "not-started";
+  ui.results.scrollTop = 0;
+  state.sourcePath = root.path;
+  state.sourcePathKey = root.pathKey;
+  state.sourceLabel = root.path.split(/[\\/]/).filter(Boolean).at(-1) ?? root.path;
+  void settings.set("lastRoot", root.path).then(() => settings.save())
+    .catch((error) => console.warn("Letzter Suchort konnte nicht gespeichert werden", error));
+  setStatus("Suchort gewählt", state.sourceLabel);
+  render();
+  ui.query.focus();
 }
 
 async function runSearch(): Promise<void> {
@@ -739,7 +947,12 @@ async function runSearch(): Promise<void> {
     await cancelSearch(state.activeSessionId).catch(() => undefined);
   }
 
+  void settings.set("lastQuery", query).then(() => settings.save())
+    .catch((error) => console.warn("Letzte Suche konnte nicht gespeichert werden", error));
+
   state.results = [];
+  findingsStats = createFindingsStats();
+  insightsOpen = window.matchMedia("(min-width: 1200px)").matches;
   state.selectedIds.clear();
   state.previewId = null;
   state.scannedCount = 0;
@@ -751,7 +964,9 @@ async function runSearch(): Promise<void> {
   state.searching = true;
   startProgressTimer();
   render();
-  setStatus("Suche läuft", "Dateinamen werden geprüft …", "working");
+  setStatus("Suche läuft", state.searchContents
+    ? "Dateinamen und Inhalte lesbarer Textdateien werden geprüft …"
+    : "Dateinamen werden geprüft …", "working");
 
   const sessionId = crypto.randomUUID();
   state.activeSessionId = sessionId;
@@ -763,6 +978,7 @@ async function runSearch(): Promise<void> {
       query,
       matchMode: state.matchMode,
       fileTypes: [...state.fileTypes],
+      searchContents: state.searchContents,
       batchSize: 250,
       maxResults: SEARCH_RESULT_LIMIT,
     });
@@ -795,9 +1011,24 @@ async function initialize(): Promise<void> {
   const storedMatchMode = await loadMatchMode().catch(() => null);
   if (storedMatchMode) state.matchMode = storedMatchMode;
 
+  const [storedPresets, storedZoom, storedRoot, storedQuery, storedContentSearch] = await Promise.all([
+    settings.get<unknown>("searchPresets").catch(() => null),
+    settings.get<unknown>("zoom").catch(() => null),
+    settings.get<unknown>("lastRoot").catch(() => null),
+    settings.get<unknown>("lastQuery").catch(() => null),
+    settings.get<unknown>("searchContents").catch(() => null),
+  ]);
+  searchPresets = parsePresets(storedPresets);
+  state.searchContents = storedContentSearch === true;
+  renderPresets();
+  if (typeof storedQuery === "string" && storedQuery.length <= 4096) ui.query.value = storedQuery;
+  const preferredZoom = normalizeZoom(storedZoom);
+  if (preferredZoom !== 1) await changeZoom(preferredZoom);
+
   await listenSearchEvents({
     onBatch(payload) {
       if (payload.sessionId !== state.activeSessionId) return;
+      addFindingsBatch(findingsStats, payload.items);
       state.results = mergeSortedResults(state.results, payload.items, state.sort);
       state.scannedCount = payload.scannedCount;
       scheduleRenderResults();
@@ -858,6 +1089,23 @@ async function initialize(): Promise<void> {
 
   ui.sourceNav.addEventListener("click", chooseSource);
   ui.mobileSource.addEventListener("click", chooseSource);
+  ui.returnUse.addEventListener("click", async () => {
+    const path = ui.returnPath.textContent?.trim() ?? "";
+    ui.returnUse.disabled = true;
+    try {
+      const root = await restoreSavedRoot(path);
+      ui.returnDialog.close();
+      useSourceRoot(root);
+    } catch (error) {
+      ui.returnDetail.textContent = `Der alte Suchort konnte nicht übernommen werden: ${safeMessage(error)} Bitte anderen Ordner wählen.`;
+      ui.returnUse.disabled = true;
+    }
+  });
+  ui.returnChange.addEventListener("click", () => {
+    ui.returnDialog.close();
+    void chooseSource();
+  });
+  ui.returnLater.addEventListener("click", () => ui.returnDialog.close());
   ui.emptyAction.addEventListener("click", () => {
     if (!state.sourcePathKey) void chooseSource();
     else ui.query.focus();
@@ -883,7 +1131,20 @@ async function initialize(): Promise<void> {
     ui.results.scrollTop = 0;
     renderResults();
   });
+  ui.insightsToggle.addEventListener("click", () => {
+    insightsOpen = !insightsOpen;
+    renderInsights();
+    scheduleVirtualRender();
+  });
+  ui.insightsMode.addEventListener("change", () => {
+    const next = ui.insightsMode.value;
+    if (next !== "type" && next !== "year" && next !== "size") return;
+    insightsMode = next;
+    renderInsights();
+    scheduleVirtualRender();
+  });
   ui.results.addEventListener("scroll", scheduleVirtualRender, { passive: true });
+  new ResizeObserver(scheduleVirtualRender).observe(ui.results);
   function changeMatchMode(mode: string): void {
     if (mode !== "all" && mode !== "any") return;
     state.matchMode = mode;
@@ -913,6 +1174,112 @@ async function initialize(): Promise<void> {
   const showSettings = () => ui.settingsDialog.showModal();
   byId<HTMLButtonElement>("settings-button").addEventListener("click", showSettings);
   byId<HTMLButtonElement>("nav-settings").addEventListener("click", showSettings);
+  ui.presetsQuick.addEventListener("click", showSavedPresets);
+  ui.presetSelect.addEventListener("change", () => renderPresets());
+  ui.presetSave.addEventListener("click", async () => {
+    const name = (ui.presetName.value.trim() || ui.query.value.trim().slice(0, 48)).trim();
+    const query = ui.query.value.trim();
+    if (!name || !query || query.length > 4096) {
+      ui.presetFeedback.textContent = "Bitte erst Suchwörter und einen kurzen Namen eingeben.";
+      return;
+    }
+    const existing = searchPresets.findIndex((preset) => preset.name.toLocaleLowerCase("de-DE") === name.toLocaleLowerCase("de-DE"));
+    if (existing < 0 && searchPresets.length >= MAX_PRESETS) {
+      ui.presetFeedback.textContent = `Maximal ${MAX_PRESETS} Vorlagen. Bitte eine alte Vorlage entfernen.`;
+      return;
+    }
+    if (existing >= 0 && !window.confirm(`Suchvorlage „${name}“ durch die aktuelle Suche ersetzen?`)) return;
+    const preset: SearchPreset = { name, query, matchMode: state.matchMode, fileTypes: [...state.fileTypes] };
+    const former = [...searchPresets];
+    if (existing >= 0) searchPresets[existing] = preset;
+    else searchPresets.push(preset);
+    try {
+      await persistPresets();
+      renderPresets(name);
+      ui.presetFeedback.textContent = `„${name}“ wurde gespeichert.`;
+    } catch (error) {
+      searchPresets = former;
+      renderPresets();
+      ui.presetFeedback.textContent = `Speichern fehlgeschlagen: ${safeMessage(error)}`;
+    }
+  });
+  ui.presetLoad.addEventListener("click", () => {
+    const preset = searchPresets.find((item) => item.name === ui.presetSelect.value);
+    if (preset) applyPreset(preset);
+  });
+  ui.presetDelete.addEventListener("click", async () => {
+    const name = ui.presetSelect.value;
+    if (!name || !window.confirm(`Suchvorlage „${name}“ wirklich entfernen?`)) return;
+    const former = searchPresets;
+    searchPresets = former.filter((preset) => preset.name !== name);
+    try {
+      await persistPresets();
+      renderPresets();
+      ui.presetFeedback.textContent = `„${name}“ wurde entfernt.`;
+    } catch (error) {
+      searchPresets = former;
+      renderPresets(name);
+      ui.presetFeedback.textContent = `Entfernen fehlgeschlagen: ${safeMessage(error)}`;
+    }
+  });
+  ui.presetImport.addEventListener("click", async () => {
+    try {
+      const contents = await importSearchPresets();
+      if (contents === null) return;
+      const parsed = parsePresets(JSON.parse(contents) as unknown);
+      if (parsed.length === 0) {
+        ui.presetFeedback.textContent = "Diese Datei enthält keine gültigen Suchvorlagen.";
+        return;
+      }
+      const existing = new Set(searchPresets.map((preset) => preset.name.toLocaleLowerCase("de-DE")));
+      const additions = parsed.filter((preset) => !existing.has(preset.name.toLocaleLowerCase("de-DE")))
+        .slice(0, MAX_PRESETS - searchPresets.length);
+      if (!additions.length) {
+        ui.presetFeedback.textContent = "Keine neuen Vorlagen. Gleiche Namen werden nicht überschrieben.";
+        return;
+      }
+      const former = searchPresets;
+      searchPresets = [...former, ...additions];
+      try {
+        await persistPresets();
+        renderPresets();
+        ui.presetFeedback.textContent = `${additions.length} Vorlage(n) importiert. Vorhandene blieben unverändert.`;
+      } catch (error) {
+        searchPresets = former;
+        throw error;
+      }
+    } catch (error) {
+      ui.presetFeedback.textContent = `Import fehlgeschlagen: ${safeMessage(error)}`;
+    }
+  });
+  ui.presetExport.addEventListener("click", async () => {
+    try {
+      const saved = await exportSearchPresets(JSON.stringify(searchPresets, null, 2));
+      if (saved) ui.presetFeedback.textContent = `${searchPresets.length} Vorlage(n) exportiert.`;
+    } catch (error) {
+      ui.presetFeedback.textContent = `Export fehlgeschlagen: ${safeMessage(error)}`;
+    }
+  });
+  ui.settingsZoom.addEventListener("change", () => void changeZoom(Number(ui.settingsZoom.value)));
+  ui.settingsContentSearch.addEventListener("change", () => {
+    if (state.searching) return;
+    state.searchContents = ui.settingsContentSearch.checked;
+    void settings.set("searchContents", state.searchContents).then(() => settings.save())
+      .catch((error) => console.warn("Inhaltssucheinstellung konnte nicht gespeichert werden", error));
+    setStatus(state.searchContents ? "Inhaltssuche eingeschaltet" : "Nur Dateinamen", state.searchContents
+      ? "Die nächste Suche prüft zusätzlich lesbare Textdateien bis 256 KB. Das kann länger dauern."
+      : "Die nächste Suche prüft nur Dateinamen.");
+  });
+  window.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey || event.deltaY === 0) return;
+    event.preventDefault();
+    void changeZoom(currentZoom + (event.deltaY < 0 ? 0.1 : -0.1));
+  }, { passive: false });
+  window.addEventListener("keydown", (event) => {
+    if (!event.ctrlKey || event.altKey) return;
+    if (event.key === "0") { event.preventDefault(); void changeZoom(1); }
+    if (event.shiftKey && event.key.toLowerCase() === "s") { event.preventDefault(); showSavedPresets(); }
+  });
   function changeTheme(value: string): void {
     if (!isTheme(value)) return;
     state.theme = value;
@@ -954,6 +1321,22 @@ async function initialize(): Promise<void> {
     );
   });
 
+  ui.copyPath.addEventListener("click", async () => {
+    const file = currentPreview();
+    if (!file) return;
+    try {
+      await navigator.clipboard.writeText(file.path);
+      setStatus("Pfad kopiert", "Der vollständige Dateipfad ist in der Zwischenablage.");
+    } catch {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(ui.previewPath);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      setStatus("Dateipfad markiert", "Drücke Strg + C, um den ausgewählten Pfad zu kopieren.", "warning");
+    }
+  });
+
   ui.export.addEventListener("click", async () => {
     const lines = state.results.map((file) => `${file.displayName}\t${file.path}\t${file.sizeBytes}`);
     const saved = await exportResults(lines).catch((error) => {
@@ -978,6 +1361,21 @@ async function initialize(): Promise<void> {
   byId<HTMLButtonElement>("window-close").addEventListener("click", () => void closeWindow());
 
   render();
+  if (typeof storedRoot === "string" && storedRoot.length > 0 && storedRoot.length <= 32_768 && state.platform.canPickFolder) {
+    ui.returnPath.textContent = storedRoot;
+    ui.returnDetail.textContent = "Prüfung läuft: Ist der Ordner noch vorhanden und lesbar?";
+    ui.returnUse.disabled = true;
+    ui.returnDialog.showModal();
+    void inspectSavedRoot(storedRoot).then((valid) => {
+      if (!ui.returnDialog.open || ui.returnPath.textContent !== storedRoot) return;
+      ui.returnUse.disabled = !valid;
+      ui.returnDetail.textContent = valid
+        ? "Der Ordner ist erreichbar. Du kannst ihn für diese Sitzung erneut freigeben oder einen anderen wählen."
+        : "Der Ordner fehlt oder ist nicht lesbar. Bitte einen anderen Ordner wählen.";
+    }).catch(() => {
+      ui.returnDetail.textContent = "Der Ordner konnte nicht geprüft werden. Bitte einen anderen wählen.";
+    });
+  }
 }
 
 void initialize();

@@ -52,7 +52,7 @@
               <p id="query-help" class="sr-only">Mehrere Suchwörter sind erlaubt. Wähle, ob alle oder nur eines der Wörter vorkommen muss.</p>
               <div class="search-options">
                 <label class="match-picker" for="match-mode-select">Wörter <select id="match-mode-select" aria-label="Verknüpfung der Suchwörter"><option value="all">Alle müssen passen</option><option value="any">Eines reicht</option></select></label>
-                <span class="search-options-note">Dateinamen · Unterordner inklusive</span>
+                <span id="search-scope-note" class="search-options-note">Dateinamen · Unterordner inklusive</span>
               </div>
               <fieldset id="file-type-filter" class="type-filters" aria-label="Dateitypen für die nächste Suche">
                 <legend class="sr-only">Dateitypen auswählen</legend>
@@ -63,20 +63,30 @@
                 <button type="button" data-file-type="text" aria-pressed="false">Sonstige</button>
               </fieldset>
               <div class="chips" aria-label="Suchbeispiele">
-                <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button id="search-help-button" type="button" class="options-chip" aria-haspopup="dialog">? Hilfe</button>
+                <button type="button" data-query-chip="urlaub">urlaub</button><button type="button" data-query-chip="2025">2025</button><button type="button" data-query-chip="foto">foto</button><button type="button" data-query-chip="rechnung">rechnung</button><button type="button" data-query-chip="musik">musik</button><button id="presets-quick" type="button" class="options-chip" aria-haspopup="dialog" hidden>☆ Vorlagen</button><button id="search-help-button" type="button" class="options-chip" aria-haspopup="dialog">? Hilfe</button>
               </div>
             </section>
 
             <section class="panel results-panel" aria-labelledby="results-title">
-              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
-              <div class="scan-metrics" aria-label="Suchprozess und Kennzahlen">
-                <span><strong id="metric-scanned">0</strong> geprüft</span>
-                <span><strong id="metric-found">0</strong> Treffer</span>
-                <span><strong id="metric-elapsed">0 s</strong></span>
-                <span><strong id="metric-speed">–</strong> /s</span>
-                <span id="metric-filter" class="metric-filter">Alle Typen</span>
+              <div class="panel-heading"><h2 id="results-title">Ergebnisse <span id="result-count">(0 Dateien)</span></h2><div class="results-tools"><button id="insights-toggle" type="button" aria-label="Fund-Statistik ein- oder ausblenden" aria-controls="insights-panel" aria-expanded="false" hidden>▥ Grafik</button><label><span class="sr-only">Sortierung</span><select id="sort-select" aria-label="Sortierung"><option value="name-asc">Name (A–Z)</option><option value="name-desc">Name (Z–A)</option><option value="size-desc">Größe</option><option value="modified-desc">Geändert</option></select></label><button id="cancel-search" class="icon-button" type="button" title="Suche abbrechen" aria-label="Suche abbrechen" disabled>■</button></div></div>
+              <div class="results-overview">
+                <div class="scan-metrics" aria-label="Suchprozess und Kennzahlen">
+                  <span><strong id="metric-scanned">0</strong> geprüft</span>
+                  <span><strong id="metric-found">0</strong> Treffer</span>
+                  <span><strong id="metric-elapsed">0 s</strong></span>
+                  <span><strong id="metric-speed">–</strong> /s</span>
+                  <span id="metric-filter" class="metric-filter">Alle Typen</span>
+                </div>
+                <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
+                <section id="insights-panel" class="insights-panel" aria-label="Grafische Fund-Statistik" hidden>
+                  <div class="insights-topline">
+                    <label for="insights-mode">Funde nach <select id="insights-mode" aria-label="Auswertung nach"><option value="type">Dateityp</option><option value="year">Jahr</option><option value="size">Dateigröße</option></select></label>
+                    <span id="insights-total" class="insights-total">0 Treffer</span>
+                  </div>
+                  <div id="insights-chart" class="insights-chart" role="img" aria-label="Noch keine Funde"></div>
+                  <ul id="insights-legend" class="insights-legend" aria-label="Anzahl pro Gruppe"></ul>
+                </section>
               </div>
-              <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
               <div id="results-list" class="results-list" role="group" aria-label="Gefundene Dateien" aria-describedby="selection-summary result-limit-notice" aria-busy="false"></div>
               <p id="selection-summary" class="sr-only" aria-live="polite" aria-atomic="true">Keine Datei ausgewählt.</p>
               <div id="empty-state" class="empty-state">
@@ -91,8 +101,11 @@
 
           <aside class="panel preview-panel" aria-labelledby="preview-title">
             <div class="panel-heading"><h2 id="preview-title"><span class="accent-dot"></span> Vorschau</h2></div>
-            <div id="preview-visual" class="preview-visual" data-kind="empty" data-symbol="⌕" data-caption="Datei auswählen" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
-            <div id="preview-content" class="preview-content"><strong id="preview-name">Keine Datei ausgewählt</strong><span id="preview-summary">–</span><dl><div><dt>Pfad:</dt><dd id="preview-path">–</dd></div><div><dt>Größe:</dt><dd id="preview-size">–</dd></div><div><dt>Geändert:</dt><dd id="preview-modified">–</dd></div><div><dt>Typ:</dt><dd id="preview-kind">–</dd></div></dl></div>
+            <div class="preview-media">
+              <div id="preview-visual" class="preview-visual" data-kind="empty" data-symbol="⌕" data-caption="Datei auswählen" aria-hidden="true"><div class="preview-sun"></div><div class="preview-wave"></div></div>
+              <pre id="text-preview" class="text-preview" aria-label="Textinhalt der ausgewählten Datei" tabindex="0" hidden></pre>
+            </div>
+            <div id="preview-content" class="preview-content"><strong id="preview-name">Keine Datei ausgewählt</strong><span id="preview-summary">–</span><dl><div><dt>Pfad:</dt><dd><span id="preview-path">–</span><button id="copy-path" type="button" aria-label="Dateipfad kopieren" title="Vollständigen Dateipfad kopieren" hidden>⧉</button></dd></div><div><dt>Größe:</dt><dd id="preview-size">–</dd></div><div><dt>Geändert:</dt><dd id="preview-modified">–</dd></div><div><dt>Typ:</dt><dd id="preview-kind">–</dd></div></dl></div>
           </aside>
         </section>
 
@@ -112,7 +125,7 @@
         <li><strong>Wörter eingeben</strong><span>Tippe einen Teil des Dateinamens ein, zum Beispiel <q>rechnung 2025</q>.</span></li>
         <li><strong>Suche starten</strong><span>Klicke auf „Suchen“. Unterordner werden automatisch mit durchsucht.</span></li>
       </ol>
-      <div class="help-note"><strong>Gut zu wissen</strong><span>Du kannst mehrere Wörter mit Leerzeichen eingeben. „Alle“ sucht nach jedem Wort, „Eines reicht“ nach mindestens einem. Groß- und Kleinschreibung spielen keine Rolle. Dateitypfilter gelten bereits während der Suche.</span></div>
+      <div class="help-note"><strong>Gut zu wissen</strong><span>Du kannst mehrere Wörter mit Leerzeichen eingeben. „Alle“ sucht nach jedem Wort, „Eines reicht“ nach mindestens einem. Groß- und Kleinschreibung spielen keine Rolle. Dateitypfilter gelten bereits während der Suche. In den Einstellungen kannst du auch unterstützte UTF-8-Textdateien bis 256 KB inhaltlich durchsuchen.</span></div>
       <form method="dialog"><button class="primary-button help-close" type="submit" autofocus>Verstanden</button></form>
     </dialog>
     <dialog id="settings-dialog" class="help-dialog settings-dialog" aria-labelledby="settings-title">
@@ -120,9 +133,32 @@
       <div class="settings-fields">
         <label for="settings-theme-select">Farbschema <select id="settings-theme-select"><option value="cyan">Cyan</option><option value="purple">Violett</option><option value="green">Grün</option><option value="orange">Orange</option></select></label>
         <label for="settings-match-select">Suchwörter standardmäßig <select id="settings-match-select"><option value="all">Alle müssen passen</option><option value="any">Eines reicht</option></select></label>
+        <label class="settings-checkbox" for="settings-content-search">Inhaltssuche <input id="settings-content-search" type="checkbox" /> Auch Textdateien durchsuchen (bis 256 KB; kann länger dauern)</label>
+        <label for="settings-zoom">Anzeigegröße <select id="settings-zoom"><option value="0.8">80 %</option><option value="0.9">90 %</option><option value="1">100 % (Standard)</option><option value="1.1">110 %</option><option value="1.2">120 %</option><option value="1.3">130 %</option><option value="1.4">140 %</option><option value="1.5">150 %</option></select></label>
+        <p>Mit Strg + Mausrad lässt sich die gesamte Oberfläche vergrößern und verkleinern. Strg + 0 stellt 100 % wieder her.</p>
+        <section class="preset-settings" aria-labelledby="preset-title">
+          <h3 id="preset-title">Gespeicherte Suchen</h3>
+          <p>Suchwörter, Wortverknüpfung und Dateitypen mit einem Namen wiederverwenden.</p>
+          <label for="preset-name">Name der Vorlage <input id="preset-name" type="text" maxlength="48" placeholder="z. B. Rechnungen 2026" /></label>
+          <button id="preset-save" type="button" class="primary-button">☆ Aktuelle Suche speichern</button>
+          <label for="preset-select">Vorhandene Vorlagen <select id="preset-select" aria-label="Gespeicherte Suchvorlage"><option value="">Noch keine Vorlage</option></select></label>
+          <div class="preset-actions"><button id="preset-load" type="button" disabled>✓ Laden</button><button id="preset-delete" type="button" disabled>✕ Entfernen</button></div>
+          <div class="preset-actions"><button id="preset-import" type="button">↥ Vorlagen importieren</button><button id="preset-export" type="button" disabled>↧ Vorlagen exportieren</button></div>
+          <p id="preset-feedback" role="status" aria-live="polite"></p>
+        </section>
         <p>Die Ergebnisliste bleibt innerhalb des Fensters scrollbar. Bei laufenden Suchen sind Fortschritt und Geschwindigkeit sichtbar; eine genaue Prozentzahl ist ohne vorherige Dateizählung nicht möglich.</p>
       </div>
       <form method="dialog"><button class="primary-button help-close" type="submit" autofocus>Schließen</button></form>
+    </dialog>
+    <dialog id="return-dialog" class="help-dialog return-dialog" aria-labelledby="return-title">
+      <div class="help-dialog-heading"><h2 id="return-title">Willkommen zurück!</h2><p>Deinen letzten Suchort haben wir gespeichert.</p></div>
+      <p id="return-path" class="return-path"></p>
+      <p id="return-detail" class="return-detail">Wir prüfen gerade, ob der Ordner noch erreichbar ist.</p>
+      <div class="return-actions">
+        <button id="return-use" class="primary-button" type="button" disabled>✓ Diesen Ordner verwenden</button>
+        <button id="return-change" type="button">📁 Anderen Ordner wählen</button>
+        <button id="return-later" type="button">Jetzt nicht</button>
+      </div>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

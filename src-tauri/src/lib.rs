@@ -4,6 +4,7 @@ use std::{
     ffi::OsString,
     fs,
     hash::{Hash, Hasher},
+    io::Read,
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -22,6 +23,7 @@ const MAX_QUERY_BYTES: usize = 4_096;
 const MAX_QUERY_TOKENS: usize = 64;
 const MAX_ACTIVE_SEARCHES: usize = 4;
 const PROGRESS_INTERVAL: usize = 250;
+const MAX_TEXT_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Default)]
 pub struct SearchRegistry(pub Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
@@ -39,6 +41,8 @@ pub struct SearchRequest {
     pub match_mode: MatchMode,
     #[serde(default)]
     pub file_types: Vec<String>,
+    #[serde(default)]
+    pub search_contents: bool,
     pub batch_size: usize,
     pub max_results: usize,
 }
@@ -168,6 +172,33 @@ fn classify(extension: &str) -> &'static str {
         "pdf" | "doc" | "docx" | "odt" | "xls" | "xlsx" | "ods" | "ppt" | "pptx" => "document",
         _ => "text",
     }
+}
+
+fn is_readable_text(path: &Path) -> bool {
+    let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or("");
+    matches!(extension.to_ascii_lowercase().as_str(),
+        "txt" | "md" | "csv" | "json" | "log" | "ini" | "toml" | "yaml" | "yml"
+        | "xml" | "html" | "htm" | "css" | "js" | "ts" | "py" | "rs" | "sh" | "conf")
+}
+
+fn bounded_utf8_text(path: &Path) -> Result<String, String> {
+    if !is_readable_text(path) {
+        return Err("Für diesen Dateityp ist keine sichere Textvorschau verfügbar.".into());
+    }
+    let metadata = fs::metadata(path).map_err(|error| format!("Datei nicht lesbar: {error}"))?;
+    if !metadata.is_file() || metadata.len() > MAX_TEXT_BYTES {
+        return Err("Diese Textdatei ist für eine schnelle Vorschau zu groß (maximal 256 KB).".into());
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    fs::File::open(path)
+        .map_err(|error| format!("Datei nicht lesbar: {error}"))?
+        .take(MAX_TEXT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("Text konnte nicht gelesen werden: {error}"))?;
+    if bytes.len() as u64 > MAX_TEXT_BYTES || bytes.contains(&0) {
+        return Err("Diese Datei ist zu groß oder enthält Binärdaten.".into());
+    }
+    String::from_utf8(bytes).map_err(|_| "Die Datei enthält keinen gültigen UTF-8-Text.".into())
 }
 
 fn stable_id(path: &Path) -> String {
@@ -357,6 +388,7 @@ struct ScanFilters<'a> {
     tokens: &'a [String],
     match_mode: MatchMode,
     file_types: &'a HashSet<String>,
+    search_contents: bool,
 }
 
 fn scan_directory<F>(
@@ -451,7 +483,8 @@ where
             }
 
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !matches_name(&name, filters.tokens, filters.match_mode) {
+            let name_matches = matches_name(&name, filters.tokens, filters.match_mode);
+            if !name_matches && !filters.search_contents {
                 continue;
             }
             let extension = Path::new(&name)
@@ -470,6 +503,20 @@ where
                     continue;
                 }
             };
+
+            if !name_matches {
+                if metadata.len() > MAX_TEXT_BYTES || !is_readable_text(&entry.path()) {
+                    continue;
+                }
+                let safe_path = match canonical_child(&canonical_root, &entry.path()) {
+                    Ok(path) => path,
+                    Err(_) => { skipped_count += 1; continue; }
+                };
+                match bounded_utf8_text(&safe_path) {
+                    Ok(contents) if matches_name(&contents, filters.tokens, filters.match_mode) => {}
+                    _ => continue,
+                }
+            }
 
             batch.push(file_entry(&entry.path(), &metadata));
             result_count += 1;
@@ -559,6 +606,45 @@ async fn pick_search_root(
     }))
 }
 
+// Nur eine Lesbarkeitsprüfung. Ein gespeicherter Pfad erhält dadurch keine Berechtigung.
+#[tauri::command]
+fn inspect_saved_root(path: String) -> bool {
+    if path.is_empty() || path.len() > 32_768 {
+        return false;
+    }
+    let candidate = Path::new(&path);
+    candidate.is_dir() && fs::read_dir(candidate).is_ok()
+}
+
+// Erst der ausdrücklich bestätigte Startassistent registriert den früheren Suchort erneut.
+#[tauri::command]
+fn restore_saved_root(
+    allowed_roots: State<'_, AllowedRoots>,
+    path: String,
+) -> Result<PickedRoot, String> {
+    if !inspect_saved_root(path.clone()) {
+        return Err("Der gespeicherte Ordner ist nicht mehr verfügbar oder nicht lesbar.".into());
+    }
+    let canonical = Path::new(&path)
+        .canonicalize()
+        .map_err(|error| format!("Suchort konnte nicht geöffnet werden: {error}"))?;
+    if !canonical.is_dir() || fs::read_dir(&canonical).is_err() {
+        return Err("Der gespeicherte Ordner ist nicht lesbar.".into());
+    }
+    let mut roots = allowed_roots
+        .0
+        .lock()
+        .map_err(|_| "Interner Berechtigungsstatus ist blockiert.".to_string())?;
+    if roots.len() >= 64 && !roots.contains(&canonical) {
+        return Err("Zu viele Suchorte in dieser Sitzung. Bitte DateiFinder neu starten.".into());
+    }
+    roots.insert(canonical.clone());
+    Ok(PickedRoot {
+        path,
+        path_key: encode_path(&canonical),
+    })
+}
+
 #[tauri::command]
 fn start_search(
     app: AppHandle,
@@ -589,6 +675,7 @@ fn start_search(
     let tokens = validate_query(&request.query)?;
     let file_types = validate_file_types(&request.file_types)?;
     let match_mode = request.match_mode;
+    let search_contents = request.search_contents;
     let id = request.session_id.trim().to_string();
     if id.is_empty() || id.len() > 128 {
         return Err("Ungültige Suchsitzung.".into());
@@ -615,6 +702,7 @@ fn start_search(
                 tokens: &tokens,
                 match_mode,
                 file_types: &file_types,
+                search_contents,
             },
             batch_size,
             max_results,
@@ -672,6 +760,16 @@ fn start_search(
     });
 
     Ok(())
+}
+
+#[tauri::command]
+fn preview_text(
+    allowed_roots: State<'_, AllowedRoots>,
+    root_path_key: String,
+    path_key: String,
+) -> Result<String, String> {
+    let file = validated_allowed_file(&allowed_roots, &root_path_key, &path_key)?;
+    bounded_utf8_text(&file)
 }
 
 #[tauri::command]
@@ -769,6 +867,52 @@ async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, Stri
         .map_err(|error| format!("Liste konnte nicht gespeichert werden: {error}"))
 }
 
+#[tauri::command]
+async fn import_search_presets(app: AppHandle) -> Result<Option<String>, String> {
+    let selected = app.dialog().file()
+        .set_title("Suchvorlagen importieren")
+        .add_filter("DateiFinder-Vorlagen", &["json"])
+        .blocking_pick_file();
+    let Some(selected) = selected else { return Ok(None); };
+    let path = selected.into_path()
+        .map_err(|error| format!("Vorlagendatei ist kein lokaler Pfad: {error}"))?;
+    let metadata = fs::metadata(&path).map_err(|error| format!("Datei nicht lesbar: {error}"))?;
+    if !metadata.is_file() || metadata.len() > 64 * 1024 {
+        return Err("Die Vorlagendatei ist zu groß (maximal 64 KB).".into());
+    }
+    let mut contents = String::new();
+    fs::File::open(&path).map_err(|error| format!("Datei nicht lesbar: {error}"))?
+        .take(64 * 1024 + 1)
+        .read_to_string(&mut contents)
+        .map_err(|_| "Die Vorlagendatei ist kein gültiger UTF-8-Text.".to_string())?;
+    if contents.len() > 64 * 1024 || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err() {
+        return Err("Die Vorlagendatei enthält keine gültige Vorlagenliste.".into());
+    }
+    Ok(Some(contents))
+}
+
+#[tauri::command]
+async fn export_search_presets(app: AppHandle, contents: String) -> Result<bool, String> {
+    if contents.len() > 64 * 1024 || serde_json::from_str::<Vec<serde_json::Value>>(&contents).is_err() {
+        return Err("Die Vorlagenliste ist ungültig oder zu groß.".into());
+    }
+    let selected = app.dialog().file()
+        .set_title("Suchvorlagen exportieren")
+        .set_file_name("dateifinder-vorlagen.json")
+        .add_filter("JSON", &["json"])
+        .blocking_save_file();
+    let Some(selected) = selected else { return Ok(false); };
+    let path = selected.into_path()
+        .map_err(|error| format!("Ziel ist kein lokaler Pfad: {error}"))?;
+    // Die native Dateiauswahl autorisiert das Ziel; vorhandene Dateien überschreiben wir dennoch nicht.
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&path)
+        .map_err(|error| format!("Ziel nicht frei (bestehende Dateien werden nicht überschrieben): {error}"))?;
+    use std::io::Write;
+    file.write_all(contents.as_bytes()).map_err(|error| format!("Vorlagen konnten nicht geschrieben werden: {error}"))?;
+    file.sync_all().map_err(|error| format!("Vorlagen konnten nicht gesichert werden: {error}"))?;
+    Ok(true)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -782,9 +926,14 @@ pub fn run() {
             cancel_search,
             platform_capabilities,
             pick_search_root,
+            inspect_saved_root,
+            restore_saved_root,
             open_file,
             reveal_file,
+            preview_text,
             export_results,
+            import_search_presets,
+            export_search_presets,
         ])
         .run(tauri::generate_context!())
         .expect("DateiFinder konnte nicht gestartet werden");
@@ -885,6 +1034,7 @@ mod tests {
                 tokens: &normalize_query("urlaub"),
                 match_mode: MatchMode::All,
                 file_types: &HashSet::new(),
+                search_contents: false,
             },
             2,
             3,
@@ -918,6 +1068,7 @@ mod tests {
                 tokens: &normalize_query("match"),
                 match_mode: MatchMode::All,
                 file_types: &HashSet::new(),
+                search_contents: false,
             },
             500,
             1_000,
@@ -946,6 +1097,7 @@ mod tests {
                 tokens: &normalize_query("match"),
                 match_mode: MatchMode::All,
                 file_types: &HashSet::new(),
+                search_contents: false,
             },
             2,
             10,
@@ -972,6 +1124,7 @@ mod tests {
                 tokens: &normalize_query("match"),
                 match_mode: MatchMode::All,
                 file_types: &HashSet::new(),
+                search_contents: false,
             },
             2,
             10,
@@ -1036,6 +1189,7 @@ mod tests {
                 tokens: &normalize_query("urlaub 2025"),
                 match_mode: MatchMode::Any,
                 file_types: &types,
+                search_contents: false,
             },
             10,
             100,
@@ -1058,6 +1212,34 @@ mod tests {
         assert_eq!(classify("JPG"), "image");
         assert_eq!(classify("Pdf"), "document");
         assert_eq!(classify("MP3"), "audio");
+    }
+
+    #[test]
+    fn content_search_matches_text_but_never_binary_or_outsize_files() {
+        let root = temp_test_dir("content-bounded");
+        fs::write(root.join("notiz.txt"), "Ein wichtiger geheimer Hinweis.").expect("write text");
+        fs::write(root.join("bild.png"), b"geheimer\0binary").expect("write binary");
+        fs::write(root.join("lang.txt"), vec![b'a'; (MAX_TEXT_BYTES + 1) as usize]).expect("write oversized");
+        let cancelled = AtomicBool::new(false);
+        let mut matches = Vec::new();
+        let outcome = scan_directory(
+            root.clone(),
+            ScanFilters {
+                tokens: &normalize_query("geheimer"),
+                match_mode: MatchMode::All,
+                file_types: &HashSet::new(),
+                search_contents: true,
+            },
+            10, 100, &cancelled,
+            |event| if let ScanEvent::Batch { items, .. } = event {
+                matches.extend(items.into_iter().map(|item| item.display_name));
+            },
+        );
+        assert_eq!(outcome.result_count, 1);
+        assert_eq!(matches, vec!["notiz.txt"]);
+        assert!(bounded_utf8_text(&root.join("lang.txt")).is_err());
+        assert!(bounded_utf8_text(&root.join("bild.png")).is_err());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

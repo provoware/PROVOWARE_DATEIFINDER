@@ -30,6 +30,12 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ vor der Suche kombinierbare Dateitypfilter für Bilder, Dokumente, Audio und Sonstige
 - ✅ Mehrwortsuche mit „alle Wörter“ oder „mindestens eines“
 - ✅ live sichtbare Prüfzahlen, Treffer, Laufzeit und Suchgeschwindigkeit (Fortschritt ohne erfundene Prozentzahl)
+- ✅ kompakte, farbige Fund-Statistik nach Dateityp, Änderungsjahr oder Größenklasse mit exakten Stückzahlen
+- ✅ bis zu 20 benannte Suchvorlagen samt Dateitypfiltern und Wortmodus, inklusive JSON-Import/Export
+- ✅ Wiederverwendung des letzten Suchorts nach erneuter Prüfung und ausdrücklicher Freigabe beim Start
+- ✅ persistenter Zoom (80–150 %) über Einstellungen, Strg + Mausrad oder Strg + 0
+- ✅ optionale Textinhaltssuche und Textvorschau für ausgewählte UTF-8-Formate bis 256 KB pro Datei
+- ✅ vollständigen Dateipfad aus der Vorschau kopieren
 - ✅ Einstellungen im Dashboard-Header für Farbschema und Suchwort-Vorgabe
 - ✅ dezente Farbtönung der Ergebniszeilen für Bilder, Dokumente, Audio und sonstige Dateien
 - ✅ Startprüfung für belegten Vite-Port 1420 mit sicherer Zuordnung statt blindem Prozessabbruch
@@ -110,6 +116,8 @@ Die UI kennt nur **Fähigkeiten und Ports**, nicht Windows/Android/iOS-Sonderfä
 
 Das Fenster lässt sich verkleinern und vergrößern. Große Trefferlisten erweitern nicht das Fenster, sondern scrollen innerhalb des Ergebnisbereichs. Über das Zahnrad im Header lassen sich Farbschema und Standard-Suchmodus einstellen.
 
+Über **„▥ Grafik“** bei den Ergebnissen lässt sich die kleine Fund-Statistik ein- und ausblenden. Sie zeigt die Mengen grafisch und als lesbare Zahlen. Im Auswahlfeld **„Funde nach“** wechselst du zwischen **Dateityp**, **Jahr** (letztes Änderungsdatum) und **Dateigröße** (0 Byte, unter 1 MB, 1–10 MB, 10–100 MB, 100 MB–1 GB, ab 1 GB). Bei älteren oder fehlenden Zeitangaben gibt es die Gruppen „Ältere“ beziehungsweise „Ohne Datum“. Auf großen Bildschirmen öffnet sich die Statistik mit den ersten Treffern automatisch; in kleinen Fenstern öffnest du sie bei Bedarf, ohne die Liste zu verkleinern. Sie zählt die tatsächlich angezeigten Treffer, nicht alle geprüften Dateien. Während der Suche ist das ein Zwischenstand; bei einer Trefferbegrenzung ist die Statistik ebenfalls unvollständig.
+
 Ab einer Fensterbreite von 1200 CSS-Pixeln wachsen Navigation, Schrift,
 Suchbedienelemente und Dateidetails kontrolliert mit. Wenn noch keine Treffer
 existieren, erklärt die Mitte den nächsten sinnvollen Schritt: Ordner wählen,
@@ -122,6 +130,18 @@ erscheinen. Die kompakte 768×512-Ausgangsansicht bleibt erhalten.
 Die Trefferliste markiert Bilder dezent cyanblau, Dokumente rosarot,
 Audio violett und sonstige Dateien grünlich. Die Dateinamen bleiben gut
 lesbar; die Farben ergänzen Dateisymbol und Dateityp, statt sie zu ersetzen.
+
+### Gespeicherte Suchvorlagen und Startassistent
+
+Unter **Einstellungen** kannst du die aktuelle Suchanfrage mit einem Namen speichern. Der DateiFinder merkt sich dazu die Wortverknüpfung und ausgewählte Dateitypen. Bereits vorhandene Vorlagen erscheinen als Schnellzugriff in der Suche. Bis zu 20 Vorlagen sind möglich. Import und Export funktionieren über JSON-Dateien; vorhandene Namen werden beim Import nicht ungefragt ersetzt. **Strg + Umschalt + S** öffnet die Vorlageneinstellungen.
+
+Der letzte Suchordner und die letzte Suchanfrage werden für den nächsten Start gespeichert. Dabei gilt: Ein alter Ordnername verleiht noch keine Zugriffsberechtigung. Beim Neustart prüft DateiFinder zuerst, ob der Ordner lesbar ist, und fragt über **„Diesen Ordner verwenden“**, **„Anderen Ordner wählen“** oder **„Jetzt nicht“**, wie es weitergehen soll.
+
+### Textsuche, Vorschau und Anzeigegröße
+
+In **Einstellungen → Inhaltssuche** lässt sich ergänzend zur Dateinamensuche das Durchsuchen lesbarer Textdateien einschalten. Unterstützt werden unter anderem TXT, MD, CSV, JSON, LOG, HTML und gängige Quelltextformate. Pro Datei werden höchstens 256 KB gelesen; größere Dateien, PDFs, Office- und Binärformate werden **nicht inhaltlich durchsucht**. Der vorhandene Suchabbruch bleibt aktiv; auf sehr großen Dateibäumen kann die Inhaltssuche länger dauern.
+
+Beim Auswählen einer passenden Textdatei erscheint anstelle des Typsymbols eine scrollbar begrenzte Textvorschau. Sie liest nur innerhalb des freigegebenen Suchorts, akzeptiert UTF-8 und zeigt höchstens 20.000 Zeichen. Der Pfad lässt sich über den kleinen Knopf daneben kopieren. In **Einstellungen → Anzeigegröße** sind 80–150 % möglich; Strg + Mausrad ändert die Zoomstufe, Strg + 0 stellt 100 % wieder her. Das Farbschema, der Suchmodus, die Inhaltssuche und der Zoom bleiben gespeichert.
 
 Siehe:
 

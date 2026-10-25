@@ -70,8 +70,34 @@ test("file actions use lossless path keys instead of display paths", () => {
 
 test("search progress is independent of match branch", () => {
   const progressIndex = rust.indexOf("should_emit_progress(scanned_count, last_progress)");
-  const matchIndex = rust.indexOf("if !matches_name(&name, filters.tokens, filters.match_mode)");
+  const matchIndex = rust.indexOf("let name_matches = matches_name(&name, filters.tokens, filters.match_mode)");
   assert.ok(progressIndex > 0 && matchIndex > 0 && progressIndex < matchIndex);
+});
+
+test("optional text search is bounded and text preview honors the source permission", () => {
+  assert.match(rust, /const MAX_TEXT_BYTES:\s*u64\s*=\s*256 \* 1024/u);
+  assert.match(rust, /if metadata\.len\(\) > MAX_TEXT_BYTES \|\| !is_readable_text\(&entry\.path\(\)\)/u);
+  assert.match(rust, /fn bounded_utf8_text\(/u);
+  assert.match(rust, /fn preview_text\([\s\S]*?validated_allowed_file\(&allowed_roots, &root_path_key, &path_key\)/u);
+  assert.match(rust, /search_contents: bool/u);
+});
+
+test("saved folder is inspected without granting access and requires explicit restoration", () => {
+  const inspect = rust.slice(rust.indexOf("fn inspect_saved_root("), rust.indexOf("fn restore_saved_root("));
+  assert.match(inspect, /read_dir\(candidate\)\.is_ok\(\)/u);
+  assert.doesNotMatch(inspect, /roots\.insert/u);
+  const restore = rust.slice(rust.indexOf("fn restore_saved_root("), rust.indexOf("fn start_search("));
+  assert.match(restore, /if !inspect_saved_root\(path\.clone\(\)\)/u);
+  assert.match(restore, /roots\.insert\(canonical\.clone\(\)\)/u);
+  assert.match(frontend, /ui\.returnUse\.addEventListener\("click"/u);
+});
+
+test("template import and export have size bounds and exports never overwrite existing files", () => {
+  const jsonImport = rust.slice(rust.indexOf("async fn import_search_presets("), rust.indexOf("async fn export_search_presets("));
+  const jsonExport = rust.slice(rust.indexOf("async fn export_search_presets("), rust.indexOf("pub fn run()"));
+  assert.match(jsonImport, /metadata\.len\(\) > 64 \* 1024/u);
+  assert.match(jsonImport, /take\(64 \* 1024 \+ 1\)/u);
+  assert.match(jsonExport, /create_new\(true\)/u);
 });
 
 test("file type and word-mode filtering is bounded before metadata is read", () => {

@@ -4,13 +4,18 @@ const themes = ["cyan", "purple", "green", "orange"] as const;
 
 async function installSearchAdapter(
   page: import("@playwright/test").Page,
-  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[] } = {},
+  options: { listenerFailure?: boolean; itemCount?: number; limitReached?: boolean; reportedResultCount?: number; kinds?: string[]; sizes?: number[]; modifiedTimes?: (number | null)[]; names?: string[]; extensions?: string[]; previewContent?: string } = {},
 ) {
   await page.addInitScript((testOptions) => {
     const {
       listenerFailure = false,
       itemCount = 1,
       kinds = [],
+      sizes = [],
+      modifiedTimes = [],
+      names = [],
+      extensions = [],
+      previewContent = "Beispieltext",
       limitReached = false,
       reportedResultCount = itemCount,
     } = testOptions;
@@ -37,6 +42,9 @@ async function installSearchAdapter(
       async pickDirectory() {
         return { path: "/test/Dokumente", pathKey: "test-root" };
       },
+      async previewText() {
+        return previewContent;
+      },
       async listenSearchEvents(listeners) {
         if (listenerFailure) throw new Error("listener registration failed");
         runtime.__searchListeners = listeners;
@@ -46,14 +54,14 @@ async function installSearchAdapter(
         runtime.__lastSearchRequest = request;
         const items = Array.from({ length: itemCount }, (_, index) => ({
           id: `invoice-${index}`,
-          displayName: index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`,
+          displayName: names[index] ?? (index === 0 ? "rechnung-2025.pdf" : `rechnung-2025-${index}.pdf`),
           path: index === 0
             ? "/test/Dokumente/rechnung-2025.pdf"
             : `/test/Dokumente/rechnung-2025-${index}.pdf`,
           pathKey: `invoice-key-${index}`,
-          extension: "pdf",
-          sizeBytes: 2048 + index,
-          modifiedAt: 1_735_689_600_000 + index,
+          extension: extensions[index] ?? "pdf",
+          sizeBytes: sizes[index] ?? 2048 + index,
+          modifiedAt: modifiedTimes[index] === undefined ? 1_735_689_600_000 + index : modifiedTimes[index],
           kind: kinds[index] ?? "document",
         }));
         runtime.__searchListeners?.onBatch({
@@ -161,6 +169,89 @@ test("file kinds have subtle distinct row colors in all four themes", async ({ p
     expect(new Set(values.map((value) => value.tint)).size).toBe(4);
     expect(values.every((value) => value.background.includes("linear-gradient"))).toBe(true);
   }
+});
+
+test("large-screen finding graphic shows live colored counts for type, year and size", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await installSearchAdapter(page, {
+    itemCount: 6,
+    kinds: ["image", "image", "document", "audio", "text", "document"],
+    sizes: [0, 250, 1024 * 1024, 3 * 1024 * 1024, 50 * 1024 * 1024, 1024 * 1024 * 1024],
+    modifiedTimes: [Date.UTC(2026, 1, 1), Date.UTC(2026, 1, 1), Date.UTC(2025, 1, 1), null, Date.UTC(2024, 1, 1), Date.UTC(2025, 1, 1)],
+  });
+  await page.goto("/");
+  await expect(page.locator("#insights-toggle")).toBeHidden();
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+
+  await expect(page.locator("#insights-panel")).toBeVisible();
+  await expect(page.locator("#insights-toggle")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#insights-total")).toContainText("Zwischenstand: 6");
+  await expect(page.locator("#status-title")).toHaveText("6 Dateien gefunden");
+  await expect(page.locator("#insights-total")).toContainText("Angezeigt: 6");
+  await expect(page.locator("#insights-legend li")).toHaveCount(4);
+  await expect(page.locator("#insights-legend")).toContainText("Bilder 2");
+  await expect(page.locator("#insights-legend")).toContainText("Dokumente 2");
+  await expect(page.locator("#insights-legend")).toContainText("Audio 1");
+  await expect(page.locator("#insights-legend")).toContainText("Sonstige 1");
+  const colors = await page.locator(".insights-chart-segment").evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundColor));
+  expect(new Set(colors).size).toBe(4);
+
+  await page.locator("#insights-mode").selectOption("year");
+  await expect(page.locator("#insights-legend")).toContainText("2026 2");
+  await expect(page.locator("#insights-legend")).toContainText("2025 2");
+  await expect(page.locator("#insights-legend")).toContainText("2024 1");
+  await expect(page.locator("#insights-legend")).toContainText("Ohne Datum 1");
+
+  await page.locator("#insights-mode").selectOption("size");
+  await expect(page.locator("#insights-legend")).toContainText("0 Byte 1");
+  await expect(page.locator("#insights-legend")).toContainText("Unter 1 MB 1");
+  await expect(page.locator("#insights-legend")).toContainText("1–10 MB 2");
+  await expect(page.locator("#insights-legend")).toContainText("10–100 MB 1");
+  await expect(page.locator("#insights-legend")).toContainText("Ab 1 GB 1");
+  const chartDescription = await page.locator("#insights-chart").getAttribute("aria-label");
+  expect(chartDescription).toContain("6 angezeigte Treffer");
+});
+
+test("optional text-content search is explicit and preview renders harmless text", async ({ page }) => {
+  await installSearchAdapter(page, { itemCount: 1, kinds: ["text"], names: ["gedanken.txt"], extensions: ["txt"], previewContent: "Hallo aus der Textdatei\n<script>harmlos</script>" });
+  await page.goto("/");
+  await page.locator("#settings-button").click();
+  await page.locator("#settings-content-search").check();
+  await page.keyboard.press("Escape");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("hallo");
+  await page.locator("#search-button").click();
+  await expect.poll(() => page.evaluate(() => (window as typeof window & { __lastSearchRequest?: { searchContents: boolean } }).__lastSearchRequest?.searchContents)).toBe(true);
+  await page.locator(".result-row").click();
+  await expect(page.locator("#text-preview")).toBeVisible();
+  await expect(page.locator("#text-preview")).toContainText("Hallo aus der Textdatei");
+  await expect(page.locator("#text-preview")).toContainText("<script>harmlos</script>");
+  await expect(page.locator("#preview-visual")).toBeHidden();
+  expect(await page.locator("#text-preview script").count()).toBe(0);
+});
+
+test("compact finding graphic is optional and never changes list scroll height", async ({ page }) => {
+  await page.setViewportSize({ width: 620, height: 420 });
+  await installSearchAdapter(page, { itemCount: 500 });
+  await page.goto("/");
+  await page.locator("#mobile-source-button").click();
+  await page.locator("#query-input").fill("rechnung");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#insights-toggle")).toBeVisible();
+  await expect(page.locator("#insights-panel")).toBeHidden();
+  const before = await page.locator("#results-list").evaluate((node) => node.clientHeight);
+  await page.locator("#insights-toggle").click();
+  await expect(page.locator("#insights-panel")).toBeVisible();
+  const after = await page.locator("#results-list").evaluate((node) => node.clientHeight);
+  expect(after).toBe(before);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.locator("#insights-mode").selectOption("year");
+  await expect(page.locator("#insights-legend")).toContainText("2025");
+  await page.locator("#insights-toggle").click();
+  await expect(page.locator("#insights-panel")).toBeHidden();
+  expect(await page.locator("#results-list").evaluate((node) => node.clientHeight)).toBe(before);
 });
 
 test("empty state reflects the chosen folder and offers a helpful next action", async ({ page }) => {

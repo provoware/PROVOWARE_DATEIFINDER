@@ -40,6 +40,9 @@ jobs:
       - name: Start assistant safety and abort contracts
         run: node --test tests/start-contracts.mjs
 
+      - name: Finding statistics aggregation contracts
+        run: node --experimental-strip-types --test tests/findings-insights.test.mjs tests/preferences.test.mjs
+
       - name: TypeScript gate
         run: npm run typecheck
 
