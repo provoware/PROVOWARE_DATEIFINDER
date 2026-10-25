@@ -731,6 +731,7 @@ button:disabled {
 .file-action-fields .file-action-feedback { color: var(--accent); line-height: 1.45; overflow-wrap: anywhere; }
 .file-action-progress { height: 8px; border: 1px solid rgba(var(--accent-rgb), 0.3); border-radius: 6px; overflow: hidden; background: rgba(0, 0, 0, 0.35); }
 .file-action-progress > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+.file-action-fields .file-action-byte-detail { margin-top: -6px; color: var(--text-primary); font-variant-numeric: tabular-nums; font-size: 11px; }
 .file-action-dialog-buttons { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 20px; }
 .file-action-dialog-buttons button { flex: 1 1 145px; min-height: 37px; }
 

@@ -157,6 +157,20 @@ beim ZIP-Erstellen immer erhalten. Bei einem Abbruch während des Verschiebens
 können bereits fertig verschobene Dateien im Ziel liegen; der Status informiert
 über die Anzahl. Eine bestehende Datei wird auch dann nie still überschrieben.
 
+**Vorbereitung auf Version 0.2:** Der Dialog zeigt zusätzlich verarbeitete Byte,
+Gesamtgröße, durchschnittliche Übertragungsrate und – soweit sinnvoll – eine
+vorsichtige Restzeit-Schätzung. Bei ZIP wird zunächst der Kopierfortschritt der
+Quelldaten angezeigt; Komprimierung und Archivprüfung werden danach als eigene
+Schritte ausgewiesen. Die Anzeige verspricht nicht, die Komprimierungszeit
+exakt zu berechnen. Fortschrittsereignisse werden gedrosselt, damit auch große
+Dateien die Oberfläche nicht mit Meldungen überlasten.
+
+Kontrollierte Tests prüfen nun auch Abbruch **mitten im Schreiben**, während
+der Übertragung veränderte Quelldateien, plötzlich entstandene Zielkollisionen
+und einen sicheren erneuten Versuch nach einer älteren temporären Datei.
+Zurückgelassene fremde oder unbekannte temporäre Dateien werden aus
+Sicherheitsgründen nicht automatisch gelöscht.
+
 ### Gespeicherte Suchvorlagen und Startassistent
 
 Unter **Einstellungen** kannst du die aktuelle Suchanfrage mit einem Namen speichern. Der DateiFinder merkt sich dazu die Wortverknüpfung und ausgewählte Dateitypen. Bereits vorhandene Vorlagen erscheinen als Schnellzugriff in der Suche. Bis zu 20 Vorlagen sind möglich. Import und Export funktionieren über JSON-Dateien; vorhandene Namen werden beim Import nicht ungefragt ersetzt. **Strg + Umschalt + S** öffnet die Vorlageneinstellungen.
