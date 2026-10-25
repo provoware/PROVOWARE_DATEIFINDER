@@ -60,7 +60,13 @@ struct ByteProgress<'a, F: FnMut(usize, usize, u64, u64, &str)> {
 
 impl<F: FnMut(usize, usize, u64, u64, &str)> ByteProgress<'_, F> {
     fn report(&mut self, phase: &str) {
-        (self.emit)(self.completed, self.total, self.bytes_done, self.bytes_total, phase);
+        (self.emit)(
+            self.completed,
+            self.total,
+            self.bytes_done,
+            self.bytes_total,
+            phase,
+        );
         self.last_report = Instant::now();
     }
 
@@ -337,7 +343,11 @@ where
     F: FnMut(usize, usize, u64, u64, &str),
 {
     cancelled(cancel)?;
-    let phase = if remove_original { "Datei wird verschoben" } else { "Datei wird kopiert" };
+    let phase = if remove_original {
+        "Datei wird verschoben"
+    } else {
+        "Datei wird kopiert"
+    };
     meter.report(phase);
     copy_to_stage(source, staged, cancel, |bytes| meter.advanced(bytes, phase))?;
     let _cleanup = CleanupPath::file(staged.to_path_buf());
@@ -537,13 +547,11 @@ where
             ));
         }
         completed += 1;
-        meter.file_finished(
-            if options.kind == ActionKind::Move {
-                "Dateien verschoben"
-            } else {
-                "Dateien kopiert"
-            },
-        );
+        meter.file_finished(if options.kind == ActionKind::Move {
+            "Dateien verschoben"
+        } else {
+            "Dateien kopiert"
+        });
     }
     Ok(ActionOutcome {
         completed,
@@ -830,7 +838,11 @@ mod tests {
             &root,
             std::slice::from_ref(&source),
             &dest,
-            ActionOptions { kind: ActionKind::Move, archive_name: None, session_id: "source-change" },
+            ActionOptions {
+                kind: ActionKind::Move,
+                archive_name: None,
+                session_id: "source-change",
+            },
             &AtomicBool::new(false),
             |_, _, done, total, _| {
                 if !injected && done == total {
@@ -841,7 +853,10 @@ mod tests {
         );
         assert!(injected);
         assert!(result.is_err());
-        assert_eq!(fs::read(&source).expect("preserved changed source"), changed);
+        assert_eq!(
+            fs::read(&source).expect("preserved changed source"),
+            changed
+        );
         assert!(!dest.join("updated.txt").exists());
         assert!(!dest.join(".dateifinder-source-change-0.tmp").exists());
         fs::remove_dir_all(root).expect("cleanup fixture");
@@ -860,7 +875,11 @@ mod tests {
             &root,
             std::slice::from_ref(&source),
             &dest,
-            ActionOptions { kind: ActionKind::Move, archive_name: None, session_id: "collision-race" },
+            ActionOptions {
+                kind: ActionKind::Move,
+                archive_name: None,
+                session_id: "collision-race",
+            },
             &AtomicBool::new(false),
             |_, _, done, total, _| {
                 if !injected && done == total {
@@ -872,7 +891,10 @@ mod tests {
         assert!(injected);
         assert!(result.is_err());
         assert!(source.exists());
-        assert_eq!(fs::read(&destination).expect("other data"), "Nicht überschreiben".as_bytes());
+        assert_eq!(
+            fs::read(&destination).expect("other data"),
+            "Nicht überschreiben".as_bytes()
+        );
         assert!(!dest.join(".dateifinder-collision-race-0.tmp").exists());
         fs::remove_dir_all(root).expect("cleanup fixture");
     }
@@ -886,7 +908,11 @@ mod tests {
         fs::write(&source, "Original").expect("source");
         let stale = dest.join(".dateifinder-retry-0.tmp");
         fs::write(&stale, "Vorhandene Zwischenablage").expect("old stage");
-        let options = || ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "retry" };
+        let options = || ActionOptions {
+            kind: ActionKind::Copy,
+            archive_name: None,
+            session_id: "retry",
+        };
         let first = perform_file_action(
             &root,
             std::slice::from_ref(&source),
@@ -896,7 +922,10 @@ mod tests {
             |_, _, _, _, _| {},
         );
         assert!(first.is_err());
-        assert_eq!(fs::read(&stale).expect("old stage untouched"), b"Vorhandene Zwischenablage");
+        assert_eq!(
+            fs::read(&stale).expect("old stage untouched"),
+            b"Vorhandene Zwischenablage"
+        );
         assert_eq!(fs::read(&source).expect("source"), b"Original");
         assert!(!dest.join("quelle.txt").exists());
 
@@ -912,8 +941,14 @@ mod tests {
             |_, _, _, _, _| {},
         );
         assert_eq!(retry.expect("retry").completed, 1);
-        assert_eq!(fs::read(dest.join("quelle.txt")).expect("copy"), b"Original");
-        assert_eq!(fs::read(&source).expect("original still present"), b"Original");
+        assert_eq!(
+            fs::read(dest.join("quelle.txt")).expect("copy"),
+            b"Original"
+        );
+        assert_eq!(
+            fs::read(&source).expect("original still present"),
+            b"Original"
+        );
         fs::remove_dir_all(root).expect("cleanup fixture");
     }
 
@@ -931,7 +966,11 @@ mod tests {
             &root,
             &[first, second],
             &dest,
-            ActionOptions { kind: ActionKind::Copy, archive_name: None, session_id: "byte-progress" },
+            ActionOptions {
+                kind: ActionKind::Copy,
+                archive_name: None,
+                session_id: "byte-progress",
+            },
             &AtomicBool::new(false),
             |completed, total, bytes_done, bytes_total, _| {
                 events.push((completed, total, bytes_done, bytes_total));
