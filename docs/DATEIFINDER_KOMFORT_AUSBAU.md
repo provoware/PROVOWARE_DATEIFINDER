@@ -22,7 +22,7 @@ Suchfilter, Statuszeile und Ergebnisbereich sind innerhalb der 768×512-Grenzen.
 Die ältere Cyan-Fixture-Referenz bleibt unverändert. Nur der bewusst geänderte
 Startbildschirm erhält eine aktualisierte Referenz-PNG und SHA-256-Prüfsumme.
 
-## Implementiert – Dateiaktionen (Freigabe erst nach Rust- und Browser-CI)
+## Implementiert – Dateiaktionen (in PR #43 geprüft und gemergt)
 
 - Kopieren in einen systemseitig gewählten Zielordner, wahlweise mit neuem
   Unterordner. Eingaben und einzelne Dateipfade werden erneut geprüft.
@@ -39,10 +39,24 @@ Startbildschirm erhält eine aktualisierte Referenz-PNG und SHA-256-Prüfsumme.
   entfernt. Bei Dateisystemen ohne Hardlinks erfolgt ein exklusiver,
   überprüfter Ersatzweg ohne Überschreiben.
 
-Ohne erfolgreiches Rust-Toolchain- und CI-Gate sind die neuen
-**schreibenden** Dateiaktionen bewusst noch nicht freizugeben. Sicherheitsprüfungen
-dürfen nicht allein aufgrund eines erfolgreichen Frontend-Builds als bestanden
-bezeichnet werden.
+Der bisherige Funktionsstand wurde in GitHub-CI **quality #137** und
+**autonomous-hardening #86** vollständig bestanden und anschließend als PR #43
+gemergt. Das gilt nicht automatisch für spätere Änderungen.
+
+## Version 0.2 – Fehlerfälle und Byte-Fortschritt (erneute CI erforderlich)
+
+- Die Rust-Kopierroutine zählt pro Schreibblock verarbeitete Quelldaten.
+  Fortschrittsereignisse sind auf ungefähr fünf pro Sekunde begrenzt.
+- Der Dialog zeigt Byte-Menge, Gesamtmenge, Durchschnittsrate und vorsichtige
+  Restzeit. Während ZIP-Erstellung/-Prüfung gilt kein scheinbarer 100-%-Wert.
+- Kontrollierte Rust-Tests unter eigenen temporären Testordnern simulieren
+  Schreibabbruch, gleichzeitige Quelldatei-Änderung und Zielkollision nach
+  Vorvalidierung; zusätzlich werden monotone Bytezähler getestet.
+- Ein alter temporärer Pfad wird weder überschrieben noch automatisch gelöscht.
+  Nach bewusstem Entfernen im Test kann die gleiche Aktion sicher wiederholt
+  werden. Das ist **keine automatische Wiederaufnahme nach Stromausfall**.
+- Ziel für die nächste Freigabe: Rustfmt, Clippy, Rusttests, Frontend,
+  vollständige Browser-Härtung inklusive 200 % und 768×512-Golden erneut grün.
 
 ## Nächste Schritte
 

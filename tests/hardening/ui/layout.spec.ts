@@ -24,7 +24,7 @@ async function installSearchAdapter(
       __lastSearchRequest?: unknown;
       __lastFileActionRequest?: unknown;
       __cancelledAction?: string;
-      __fileActionProgress?: (payload: { sessionId: string; completed: number; total: number; phase: string }) => void;
+      __fileActionProgress?: (payload: { sessionId: string; completed: number; total: number; bytesCompleted: number; bytesTotal: number; bytesPerSecond: number; phase: string }) => void;
       __searchListeners?: {
         onBatch(payload: unknown): void;
         onProgress(payload: unknown): void;
@@ -91,10 +91,12 @@ async function installSearchAdapter(
       },
       async executeFileAction(request) {
         runtime.__lastFileActionRequest = request;
-        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: 0, total: request.pathKeys.length, phase: "Vorprüfung" });
+        const phase = request.action === "zip" ? "ZIP: Dateien vorbereitet"
+          : request.action === "move" ? "Datei wird verschoben" : "Datei wird kopiert";
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: 0, total: request.pathKeys.length, bytesCompleted: 512, bytesTotal: 2048, bytesPerSecond: 1024, phase });
         if (actionDelayMs) await new Promise((resolve) => setTimeout(resolve, actionDelayMs));
         if (runtime.__cancelledAction === request.sessionId) throw new Error("Dateiaktion wurde abgebrochen.");
-        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: request.pathKeys.length, total: request.pathKeys.length, phase: "Dateien geprüft" });
+        runtime.__fileActionProgress?.({ sessionId: request.sessionId, completed: request.pathKeys.length, total: request.pathKeys.length, bytesCompleted: 2048, bytesTotal: 2048, bytesPerSecond: 2048, phase: request.action === "zip" ? "ZIP: Archiv wird geprüft" : "Dateien geprüft" });
         return { completed: request.pathKeys.length, destination: "/test/Ziel" };
       },
       async cancelFileAction(sessionId) { runtime.__cancelledAction = sessionId; },
@@ -187,6 +189,9 @@ test("in-progress file operation can be cancelled without closing the safety dia
   await page.locator("#action-copy").click();
   await page.locator("#file-action-start").click();
   await expect(page.locator("#file-action-cancel")).toHaveText("■ Abbrechen");
+  await expect(page.locator("#file-action-progress")).toHaveAttribute("aria-valuenow", "25");
+  await expect(page.locator("#file-action-byte-detail")).toContainText("512 B von 2 KB");
+  await expect(page.locator("#file-action-byte-detail")).toContainText("Ø 1 KB/s");
   await page.locator("#file-action-cancel").click();
   await expect(page.locator("#file-action-dialog")).toBeVisible();
   await expect(page.locator("#file-action-feedback")).toContainText("abgebrochen");

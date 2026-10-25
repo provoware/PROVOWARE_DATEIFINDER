@@ -92,6 +92,9 @@ interface FileActionProgress {
   sessionId: string;
   completed: number;
   total: number;
+  bytesCompleted: number;
+  bytesTotal: number;
+  bytesPerSecond: number;
   phase: string;
 }
 
@@ -436,6 +439,7 @@ const ui = {
   fileActionArchiveName: byId<HTMLInputElement>("file-action-archive-name"),
   fileActionProgress: byId<HTMLElement>("file-action-progress"),
   fileActionProgressBar: byId<HTMLElement>("file-action-progress-bar"),
+  fileActionByteDetail: byId<HTMLElement>("file-action-byte-detail"),
   fileActionFeedback: byId<HTMLElement>("file-action-feedback"),
   fileActionStart: byId<HTMLButtonElement>("file-action-start"),
   fileActionCancel: byId<HTMLButtonElement>("file-action-cancel"),
@@ -971,6 +975,7 @@ function showFileAction(kind: FileActionKind): void {
   ui.fileActionArchiveLabel.hidden = kind !== "zip";
   ui.fileActionArchiveName.value = "DateiFinder-Auswahl.zip";
   ui.fileActionProgress.hidden = true;
+  ui.fileActionByteDetail.hidden = true;
   ui.fileActionFeedback.textContent = "Zielordner wird vor dem Start von dir ausgewählt.";
   ui.fileActionStart.disabled = false;
   ui.fileActionStart.textContent = "Zielordner wählen und starten";
@@ -978,17 +983,26 @@ function showFileAction(kind: FileActionKind): void {
   ui.fileActionDialog.showModal();
 }
 
-function showFileActionProgress(completed: number, total: number, phase: string): void {
+function showFileActionProgress({ completed, total, bytesCompleted, bytesTotal, bytesPerSecond, phase }: FileActionProgress): void {
+  const byteFraction = bytesTotal > 0 ? Math.min(1, bytesCompleted / bytesTotal)
+    : Math.min(1, completed / Math.max(1, total));
   const percent = phase === "ZIP: Archiv wird geprüft" ? 95
     : phase === "ZIP: Archiv wird erstellt" ? 85
-      : phase === "ZIP: Dateien vorbereitet" ? Math.min(80, Math.round(80 * completed / Math.max(1, total)))
-        : total > 0 ? Math.min(100, Math.round(100 * completed / total)) : 0;
+      : phase === "ZIP: Dateien vorbereitet" ? Math.min(80, Math.round(80 * byteFraction))
+        : completed < total ? Math.min(99, Math.round(100 * byteFraction)) : Math.round(100 * byteFraction);
+  const speed = Number.isFinite(bytesPerSecond) && bytesPerSecond >= 0 ? bytesPerSecond : 0;
+  const remaining = Math.max(0, bytesTotal - bytesCompleted);
+  const eta = speed > 0 && remaining > 0 && !phase.startsWith("ZIP: Archiv")
+    ? ` · Rest ca. ${Math.ceil(remaining / speed).toLocaleString("de-DE")} s` : "";
+  const detail = `${formatBytes(bytesCompleted)} von ${formatBytes(bytesTotal)} · Ø ${formatBytes(speed)}/s${eta}`;
   ui.fileActionProgress.hidden = false;
   ui.fileActionProgress.setAttribute("aria-valuenow", String(percent));
-  ui.fileActionProgress.setAttribute("aria-valuetext", `${completed} von ${total} Dateien · ${phase}`);
+  ui.fileActionProgress.setAttribute("aria-valuetext", `${completed} von ${total} Dateien · ${detail} · ${phase}`);
   ui.fileActionProgressBar.style.width = `${percent}%`;
+  ui.fileActionByteDetail.hidden = false;
+  ui.fileActionByteDetail.textContent = detail;
   ui.fileActionFeedback.textContent = `${phase}: ${completed} von ${total} Dateien.`;
-  setStatus("Dateiaktion läuft", `${phase} · ${completed} von ${total}`, "working", false);
+  setStatus("Dateiaktion läuft", `${phase} · ${detail}`, "working", false);
 }
 
 async function requestFileActionCancel(): Promise<void> {
@@ -1298,7 +1312,7 @@ async function initialize(): Promise<void> {
 
   void listenFileActionProgress((payload) => {
     if (payload.sessionId !== activeFileActionSession) return;
-    showFileActionProgress(payload.completed, payload.total, payload.phase);
+    showFileActionProgress(payload);
   }).catch((error) => {
     console.error("File action progress unavailable", error);
     setStatus("Dateiaktionen nicht verfügbar", "Fortschrittsanzeige konnte nicht verbunden werden. Bitte neu starten.", "error");

@@ -37,6 +37,17 @@ test("file writes use exclusive temporary files, post-checks and cancellation", 
   assert.match(rust, /fn cancel_file_action\(/u);
 });
 
+test("version 0.2 measures real bytes and verifies recovery paths in isolated tests", () => {
+  assert.match(fileActions, /struct ByteProgress/u);
+  assert.match(fileActions, /copy_to_stage\(source, staged, cancel, \|bytes\| meter\.advanced\(bytes, phase\)\)/u);
+  assert.match(fileActions, /fn interrupt_mid_write_removes_incomplete_temp_and_preserves_original\(/u);
+  assert.match(fileActions, /fn source_change_during_copy_prevents_move_and_cleans_staging\(/u);
+  assert.match(fileActions, /fn collision_appearing_after_preflight_never_overwrites_other_data\(/u);
+  assert.match(fileActions, /fn old_temporary_file_is_preserved_and_manual_retry_is_safe\(/u);
+  assert.match(rust, /bytes_per_second:\s*u64/u);
+  assert.match(frontend, /fileActionByteDetail\.textContent = detail/u);
+});
+
 test("frontend capability fallback is fail-closed", () => {
   const fallback = frontend.match(/platform:\s*\{([\s\S]*?)\n\s*\},\n\};/u)?.[1] ?? "";
   for (const capability of ["canPickFolder", "canOpenFile", "canRevealFile", "canSearchRecursively", "supportsPickedFiles"]) {

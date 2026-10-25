@@ -62,6 +62,9 @@ struct FileActionProgress {
     session_id: String,
     completed: usize,
     total: usize,
+    bytes_completed: u64,
+    bytes_total: u64,
+    bytes_per_second: u64,
     phase: String,
 }
 
@@ -925,6 +928,7 @@ async fn execute_file_action(
     let new_folder_name = request.new_folder_name.clone();
     let archive_name = request.archive_name.clone();
     let operation = tauri::async_runtime::spawn_blocking(move || {
+        let started = Instant::now();
         let actual_destination = if let Some(folder_name) = new_folder_name {
             let path = destination.join(folder_name);
             fs::create_dir(&path).map_err(|error| {
@@ -944,13 +948,22 @@ async fn execute_file_action(
                 session_id: &session,
             },
             &flag,
-            |completed, total, phase| {
+            |completed, total, bytes_completed, bytes_total, phase| {
+                let elapsed = started.elapsed().as_secs_f64();
+                let bytes_per_second = if elapsed > 0.0 {
+                    (bytes_completed as f64 / elapsed) as u64
+                } else {
+                    0
+                };
                 let _ = app_for_progress.emit(
                     "file-action-progress",
                     FileActionProgress {
                         session_id: callback_session.clone(),
                         completed,
                         total,
+                        bytes_completed,
+                        bytes_total,
+                        bytes_per_second,
                         phase: phase.into(),
                     },
                 );
