@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { addFindingsBatch, createFindingsStats, insightGroups } from "../src/findings-insights.ts";
 
@@ -58,4 +59,22 @@ test("a new search gets a fresh independent overview", () => {
   addFindingsBatch(next, [file("text", 1, null)]);
   assert.deepEqual(counts(insightGroups(next, "type")), { Sonstige: 1 });
   assert.deepEqual(counts(insightGroups(former, "type")), { Audio: 1 });
+});
+
+test("year overview follows the local calendar year shown in file details", () => {
+  const moduleUrl = new URL("../src/findings-insights.ts", import.meta.url).href;
+  const script = `
+    import { addFindingsBatch, createFindingsStats, insightGroups } from ${JSON.stringify(moduleUrl)};
+    const stats = createFindingsStats();
+    addFindingsBatch(stats, [{ kind: "image", sizeBytes: 1, modifiedAt: Date.UTC(2026, 0, 1, 0, 30) }]);
+    process.stdout.write(JSON.stringify(insightGroups(stats, "year").map((group) => group.label)));
+  `;
+  for (const [timeZone, expectedYear] of [["America/Los_Angeles", "2025"], ["Europe/Berlin", "2026"]]) {
+    const child = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {
+      encoding: "utf8",
+      env: { ...process.env, TZ: timeZone },
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.deepEqual(JSON.parse(child.stdout), [expectedYear], timeZone);
+  }
 });
