@@ -29,3 +29,14 @@ test("template import limit and zoom input never produce unbounded settings", ()
   assert.equal(normalizeZoom(Number.NaN), 1);
   assert.equal(normalizeZoom("1.5"), 1);
 });
+
+test("import rejects embedded control characters in preset names and search queries", () => {
+  const make = (name, query) => ({ name, query, matchMode: "all", fileTypes: ["document"] });
+  assert.deepEqual(parsePresets([
+    make("Hidden\u0000name", "report"),
+    make("Esc\u001bape", "report"),
+    make("Name", "report\u0000secret"),
+    make("Other", "notes\u007fhidden"),
+    make("Allowed", "report 2026,invoice"),
+  ]), [make("Allowed", "report 2026,invoice")]);
+});
