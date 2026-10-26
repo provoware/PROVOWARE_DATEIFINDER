@@ -186,6 +186,28 @@ test('Fehlende npm-Pakete werden bei --no-repair nicht verändert', () => {
   } finally { f.cleanup(); }
 });
 
+test('Erstinstallation ohne Zustimmung führt kein npm ci aus', () => {
+  const f = fixture({ modules: false });
+  try {
+    writeFileSync(join(f.directory, 'package-lock.json'), '{}\n');
+    const result = f.run([]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /Erstinstallation nicht freigegeben/);
+    assert.doesNotMatch(f.callsText(), /^ci|^install|run tauri/m);
+  } finally { f.cleanup(); }
+});
+
+test('Erstinstallation mit --yes nutzt npm ci und startet', () => {
+  const f = fixture({ modules: false });
+  try {
+    writeFileSync(join(f.directory, 'package-lock.json'), '{}\n');
+    const result = f.run(['--yes']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(f.callsText(), /^ci --ignore-scripts --no-audit --no-fund$/m);
+    assert.match(f.callsText(), /run tauri -- dev/);
+  } finally { f.cleanup(); }
+});
+
 test('Systemreparatur wird bei --check niemals ausgeführt', () => {
   const f = fixture({ packages: false });
   try {

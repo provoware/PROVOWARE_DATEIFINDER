@@ -387,6 +387,9 @@ if [[ ! -d node_modules ]] || ! npm ls --depth=0 --silent >>"$LOG_FILE" 2>&1; th
   fi
   if [[ ! -d node_modules && -f package-lock.json ]]; then
     say "  ! Erstinstallation anhand der festen Paketliste erforderlich."
+    if ! consent "JavaScript-Bausteine anhand der festen Paketliste installieren (npm ci)?"; then
+      fail "Erstinstallation nicht freigegeben. Es wurden keine JavaScript-Pakete installiert."
+    fi
     run_step "JavaScript-Bausteine installieren (npm ci)" npm ci --ignore-scripts --no-audit --no-fund
   else
     say "  ! Bestehende Pakete sind unvollständig. npm repariert die Installation."
