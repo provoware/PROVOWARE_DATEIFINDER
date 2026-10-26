@@ -34,9 +34,9 @@ test("import rejects invisible control characters in preset names and queries", 
   const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
   assert.deepEqual(parsePresets([
     preset("Good", "invoice"),
-    preset("Bad\\nName", "invoice"),
-    preset("Hidden\\u0000Name", "invoice"),
-    preset("Bad query", "invoice\\u0000secret"),
-    preset("Tab query", "one\\ttwo"),
+    preset("Bad\nName", "invoice"),
+    preset("Hidden\u0000Name", "invoice"),
+    preset("Bad query", "invoice\u0000secret"),
+    preset("Tab query", "one\ttwo"),
   ]), [preset("Good", "invoice")]);
 });
