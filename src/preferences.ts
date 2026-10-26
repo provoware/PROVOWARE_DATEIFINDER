@@ -12,6 +12,7 @@ export const MAX_PRESETS = 20;
 export const MIN_ZOOM = 0.8;
 export const MAX_ZOOM = 1.5;
 const FILE_KINDS: SavedFileKind[] = ["image", "document", "audio", "text"];
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
 export function parsePresets(value: unknown): SearchPreset[] {
   if (!Array.isArray(value)) return [];
@@ -23,6 +24,7 @@ export function parsePresets(value: unknown): SearchPreset[] {
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const query = typeof item.query === "string" ? item.query.trim() : "";
     if (!name || name.length > 48 || !query || query.length > 4096) continue;
+    if (CONTROL_CHARS.test(name) || CONTROL_CHARS.test(query)) continue;
     const key = name.toLocaleLowerCase("de-DE");
     if (seen.has(key)) continue;
     if (item.matchMode !== "all" && item.matchMode !== "any") continue;
