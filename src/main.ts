@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
+import { formatDate } from "./date-format";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
@@ -228,13 +229,6 @@ function formatBytes(bytes: number): string {
   return `${value.toLocaleString("de-DE", { maximumFractionDigits: digits })} ${unit}`;
 }
 
-function formatDate(epochMs: number | null): string {
-  if (!epochMs) return "–";
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(epochMs));
-}
 
 const settings = new LazyStore("settings.json");
 
