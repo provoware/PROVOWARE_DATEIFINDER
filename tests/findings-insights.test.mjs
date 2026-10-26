@@ -59,3 +59,17 @@ test("a new search gets a fresh independent overview", () => {
   assert.deepEqual(counts(insightGroups(next, "type")), { Sonstige: 1 });
   assert.deepEqual(counts(insightGroups(former, "type")), { Audio: 1 });
 });
+
+test("size aggregation rejects malformed sizes and cannot overflow", () => {
+  const stats = createFindingsStats();
+  addFindingsBatch(stats, [
+    file("image", Number.MAX_SAFE_INTEGER, null),
+    file("image", Number.MAX_SAFE_INTEGER, null),
+    file("image", 0.5, null),
+    file("image", Number.MAX_SAFE_INTEGER + 1, null),
+    file("image", 1, null),
+  ]);
+  assert.equal(stats.total, 5);
+  assert.equal(stats.totalBytes, Number.MAX_SAFE_INTEGER);
+  assert.equal(counts(insightGroups(stats, "size")).Unbekannt, 2);
+});
