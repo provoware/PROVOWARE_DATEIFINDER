@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { validActionName } from "../../src/file-action-names.ts";
 
 const [frontend, rust, fileActions, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
   readFile("src/main.ts", "utf8"),
@@ -201,4 +202,25 @@ test("desktop opens at the reference size but can resize to a smaller safe minim
   assert.equal(main.minWidth, 620);
   assert.equal(main.minHeight, 420);
   assert.equal(main.resizable, true);
+});
+
+
+test("file-action names enforce the Rust limit of 100 UTF-8 bytes", () => {
+  assert.equal(validActionName("a".repeat(100)), true);
+  assert.equal(validActionName("a".repeat(101)), false);
+  assert.equal(validActionName("ä".repeat(50)), true);
+  assert.equal(validActionName("ä".repeat(51)), false);
+  assert.equal(validActionName("🦊".repeat(25)), true);
+  assert.equal(validActionName("🦊".repeat(26)), false);
+});
+
+test("file-action names reject Unicode controls without weakening existing rules", () => {
+  for (const name of ["abc\u0085def", "abc\u009fdef", "abc\u0000def", "abc\u007fdef",
+    "abc/def", ".hidden", "trailing.", " abc", "abc "]) {
+    assert.equal(validActionName(name), false, "unexpectedly accepted " + JSON.stringify(name));
+  }
+  assert.equal(validActionName("Urlaub 2026.zip"), true);
+  assert.match(frontend, /import \{ validActionName \} from "\.\/file-action-names"/u);
+  assert.match(fileActions, /name\.len\(\) <= 100/u);
+  assert.match(fileActions, /character\.is_control\(\)/u);
 });

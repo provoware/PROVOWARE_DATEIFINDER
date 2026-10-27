@@ -6,6 +6,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
+import { validActionName } from "./file-action-names";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -951,12 +952,6 @@ function render(): void {
   renderSearchOptions();
   renderPresets();
   renderResults();
-}
-
-function validActionName(name: string): boolean {
-  return name.length > 0 && name.length <= 100 && name === name.trim()
-    && !name.startsWith(".") && !name.endsWith(".")
-    && !/[\\/:*?"<>|\x00-\x1f\x7f]/.test(name);
 }
 
 function showFileAction(kind: FileActionKind): void {
