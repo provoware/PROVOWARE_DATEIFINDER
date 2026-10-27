@@ -1012,7 +1012,10 @@ mod tests {
         let error = preflight_sources(&root, std::slice::from_ref(&link))
             .expect_err("internal symlink must be rejected");
         assert!(error.contains("Verknüpfungen"), "{error}");
-        assert_eq!(fs::read(&original).expect("original intact"), b"Originaldaten");
+        assert_eq!(
+            fs::read(&original).expect("original intact"),
+            b"Originaldaten"
+        );
         fs::remove_dir_all(root).expect("cleanup fixture");
     }
 }
