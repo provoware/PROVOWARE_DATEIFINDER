@@ -1,6 +1,32 @@
 import { expect, test } from "@playwright/test";
+import { formatExportLine } from "../../../src/export-lines";
 
 const themes = ["cyan", "purple", "green", "orange"] as const;
+
+test("TXT export preserves ordinary rows and escapes embedded tabs or line breaks", () => {
+  expect(formatExportLine({ displayName: "bericht.txt", path: "/home/bericht.txt", sizeBytes: 42 }))
+    .toBe("bericht.txt\t/home/bericht.txt\t42");
+  const line = formatExportLine({
+    displayName: "zeile\n2\tname.txt",
+    path: "/tmp/zeile\n2\tname.txt",
+    sizeBytes: 12,
+  });
+  expect(line).toBe("zeile\\n2\\tname.txt\t/tmp/zeile\\n2\\tname.txt\t12");
+  expect(line.split("\t")).toHaveLength(3);
+  expect(line).not.toMatch(/[\r\n\u0085\u2028\u2029]/u);
+});
+
+test("TXT export distinguishes literal backslashes from encoded controls", () => {
+  const line = formatExportLine({
+    displayName: "literal\\t und tab\t",
+    path: "/tmp/literal\\n und newline\n",
+    sizeBytes: 0,
+  });
+  expect(line).toBe("literal\\\\t und tab\\t\t/tmp/literal\\\\n und newline\\n\t0");
+  expect(formatExportLine({ displayName: "a\u0085b\u2028c\u2029d\u0001e", path: "/tmp/ok", sizeBytes: 1 }))
+    .toBe("a\\u0085b\\u2028c\\u2029d\\u0001e\t/tmp/ok\t1");
+});
+
 
 async function installSearchAdapter(
   page: import("@playwright/test").Page,

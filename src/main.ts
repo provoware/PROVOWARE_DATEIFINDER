@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { formatExportLine } from "./export-lines";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 
@@ -1586,7 +1587,7 @@ async function initialize(): Promise<void> {
   });
 
   ui.export.addEventListener("click", async () => {
-    const lines = state.results.map((file) => `${file.displayName}\t${file.path}\t${file.sizeBytes}`);
+    const lines = state.results.map(formatExportLine);
     const saved = await exportResults(lines).catch((error) => {
       setStatus("Liste konnte nicht gespeichert werden", safeMessage(error), "error");
       return false;
