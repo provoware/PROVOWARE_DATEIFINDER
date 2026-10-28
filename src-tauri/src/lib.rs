@@ -1065,6 +1065,24 @@ fn reveal_file(
         .map_err(|error| format!("Datei konnte nicht im Dateimanager angezeigt werden: {error}"))
 }
 
+// Exportziel exklusiv neu anlegen: eine bereits vorhandene Datei bleibt unangetastet.
+fn write_new_export(path: &Path, text: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            format!("Exportziel nicht frei (vorhandene Dateien werden nicht überschrieben): {error}")
+        })?;
+    file.write_all(text.as_bytes())
+        .map_err(|error| format!("Liste konnte nicht gespeichert werden: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("Liste konnte nicht gesichert werden: {error}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, String> {
     let total_bytes = validate_export_lines(&lines)?;
@@ -1093,9 +1111,8 @@ async fn export_results(app: AppHandle, lines: Vec<String>) -> Result<bool, Stri
         text.push('\n');
     }
 
-    fs::write(path, text)
-        .map(|_| true)
-        .map_err(|error| format!("Liste konnte nicht gespeichert werden: {error}"))
+    write_new_export(&path, &text)?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1201,7 +1218,7 @@ mod tests {
         bounded_utf8_text, canonical_child, canonical_scan_directory, classify, decode_path,
         encode_path, matches_name, normalize_query, register_search_session, scan_directory,
         should_emit_progress, validate_export_lines, validate_file_types, validate_query,
-        MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
+        write_new_export, MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
         MAX_QUERY_BYTES, MAX_QUERY_TOKENS, MAX_TEXT_BYTES,
     };
     use std::{
@@ -1591,5 +1608,37 @@ mod tests {
     fn export_accepts_reasonable_payload() {
         let lines = vec!["a\tb\t1".to_string(), "c\td\t2".to_string()];
         assert_eq!(validate_export_lines(&lines).expect("valid export"), 12);
+    }
+
+    #[test]
+    fn export_creates_new_file_but_never_overwrites_existing_content() {
+        let dir = temp_test_dir("export-no-overwrite");
+        let target = dir.join("treffer.txt");
+
+        write_new_export(&target, "erste Liste").expect("new export succeeds");
+        assert_eq!(fs::read_to_string(&target).expect("read export"), "erste Liste");
+
+        let error = write_new_export(&target, "zweite Liste").expect_err("existing export must fail");
+        assert!(error.contains("nicht überschrieben"));
+        assert_eq!(fs::read_to_string(&target).expect("read original"), "erste Liste");
+
+        fs::remove_dir_all(dir).expect("clean test directory");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn export_rejects_symlink_without_changing_its_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir = temp_test_dir("export-symlink");
+        let original = dir.join("original.txt");
+        let link = dir.join("treffer.txt");
+        fs::write(&original, "Unverändert").expect("create original");
+        symlink(&original, &link).expect("create link");
+
+        assert!(write_new_export(&link, "Neue Liste").is_err());
+        assert_eq!(fs::read_to_string(&original).expect("read original"), "Unverändert");
+
+        fs::remove_dir_all(dir).expect("clean test directory");
     }
 }
