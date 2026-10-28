@@ -801,6 +801,13 @@ function focusResultAt(index: number): void {
   target?.focus({ preventScroll: true });
 }
 
+function formatResultRowDate(epochMs: number | null): string {
+  if (epochMs === null || !Number.isFinite(epochMs)) return "–";
+  const date = new Date(epochMs);
+  if (Number.isNaN(date.getTime())) return "–";
+  return new Intl.DateTimeFormat("de-DE").format(date);
+}
+
 function renderVisibleResultRows(): void {
   const focusedRow = document.activeElement instanceof HTMLElement
     ? document.activeElement.closest<HTMLButtonElement>(".result-row")
@@ -848,9 +855,7 @@ function renderVisibleResultRows(): void {
 
     const date = document.createElement("span");
     date.className = "file-date";
-    date.textContent = file.modifiedAt
-      ? new Intl.DateTimeFormat("de-DE").format(new Date(file.modifiedAt))
-      : "–";
+    date.textContent = formatResultRowDate(file.modifiedAt);
 
     row.append(checkbox, icon, name, path, size, date);
     row.addEventListener("click", () => {
