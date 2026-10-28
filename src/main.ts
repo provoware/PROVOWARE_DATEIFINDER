@@ -744,6 +744,10 @@ function renderPreview(): void {
         if (lastPreviewRequest === requestKey) ui.textPreview.textContent = `Textvorschau nicht verfügbar: ${safeMessage(error)}`;
       });
     }
+  } else {
+    // Non-text selections invalidate pending previews and cached text.
+    lastPreviewRequest = "";
+    ui.textPreview.textContent = "";
   }
 }
 
