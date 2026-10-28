@@ -1141,7 +1141,19 @@ function useSourceRoot(root: PickedRoot): void {
   ui.query.focus();
 }
 
+let searchStartPending = false;
+
 async function runSearch(): Promise<void> {
+  if (searchStartPending) return;
+  searchStartPending = true;
+  try {
+    await runSearchUnlocked();
+  } finally {
+    searchStartPending = false;
+  }
+}
+
+async function runSearchUnlocked(): Promise<void> {
   if (state.fileActionBusy) {
     setStatus("Dateiaktion läuft", "Bitte vor der nächsten Suche die Dateiaktion abschließen.", "warning");
     return;
