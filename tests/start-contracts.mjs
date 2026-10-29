@@ -308,3 +308,30 @@ test('Später Portkonflikt wird höchstens einmal nach sicherem Stopp neu versuc
     assert.equal(f.callsText().match(/run tauri -- dev/g)?.length, 2);
   } finally { vite.kill('SIGTERM'); f.cleanup(); }
 });
+
+test('Tauri-Versionsprüfung akzeptiert kompatible Versionspräfixe', () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.directory, 'package.json'), JSON.stringify({
+      scripts: { tauri: 'tauri' }, devDependencies: { '@tauri-apps/cli': '^2.11.4' },
+    }));
+    const result = f.run(['--check']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Vorprüfung erfolgreich/);
+  } finally { f.cleanup(); }
+});
+
+for (const version of ['^3.2.0', '12.0.0']) {
+  test(`Nicht unterstützte Tauri-Version ${version} stoppt vor Systemänderungen`, () => {
+    const f = fixture({ packages: false });
+    try {
+      writeFileSync(join(f.directory, 'package.json'), JSON.stringify({
+        scripts: { tauri: 'tauri' }, devDependencies: { '@tauri-apps/cli': version },
+      }));
+      const result = f.run(['--yes']);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /nicht als Tauri 2 bestätigt/);
+      assert.doesNotMatch(f.callsText(), /SUDO_CALLED|CURL_CALLED|run tauri/);
+    } finally { f.cleanup(); }
+  });
+}
