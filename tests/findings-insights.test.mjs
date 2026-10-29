@@ -25,7 +25,7 @@ test("type overview uses the same four kinds as colored result rows", () => {
 
 test("year overview groups old and missing dates without losing any finds", () => {
   const stats = createFindingsStats();
-  addFindingsBatch(stats, Array.from({ length: 9 }, (_, index) => file("image", 1, Date.UTC(2017 + index, 0, 1))));
+  addFindingsBatch(stats, Array.from({ length: 9 }, (_, index) => file("image", 1, Date.UTC(2017 + index, 6, 1))));
   addFindingsBatch(stats, [file("image", 1, null), file("image", 1, Number.NaN)]);
   const groups = insightGroups(stats, "year");
   assert.deepEqual(groups.map((group) => group.label), ["2025", "2024", "2023", "2022", "2021", "Ältere", "Ohne Datum"]);
