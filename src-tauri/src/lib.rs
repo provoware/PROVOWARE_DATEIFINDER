@@ -24,6 +24,9 @@ const MAX_EXPORT_LINES: usize = 250_000;
 const MAX_EXPORT_LINE_BYTES: usize = 32_768;
 const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 const MAX_QUERY_BYTES: usize = 4_096;
+// Begrenzung für untrusted IPC-Dateischlüssel vor der Hex-Dekodierung.
+// 32.768 UTF-16-Einheiten decken auch lange Windows-Pfade ab.
+const MAX_PATH_KEY_UNITS: usize = 32_768;
 const MAX_QUERY_TOKENS: usize = 64;
 const MAX_ACTIVE_SEARCHES: usize = 4;
 const PROGRESS_INTERVAL: usize = 250;
@@ -279,7 +282,7 @@ where
 }
 
 fn decode_units(value: &str, width: usize) -> Result<Vec<u32>, String> {
-    if value.len() % width != 0 {
+    if width == 0 || value.len() % width != 0 || value.len() / width > MAX_PATH_KEY_UNITS {
         return Err("Ungültiger Dateischlüssel.".into());
     }
     value
@@ -1251,6 +1254,14 @@ mod tests {
         assert!(validate_query(&"x".repeat(MAX_QUERY_BYTES + 1)).is_err());
         assert!(validate_query(&vec!["x"; MAX_QUERY_TOKENS + 1].join(" ")).is_err());
         assert_eq!(validate_query("Urlaub 2025").expect("valid query").len(), 2);
+    }
+
+    #[test]
+    fn path_key_decoder_rejects_oversized_encoded_input() {
+        // Ohne Vorabgrenze würde für jeden Hex-Block ein u32 angelegt.
+        assert!(decode_units(&"00".repeat(MAX_PATH_KEY_UNITS + 1), 2).is_err());
+        assert!(decode_units(&"0000".repeat(MAX_PATH_KEY_UNITS + 1), 4).is_err());
+        assert_eq!(decode_units("2f", 2).expect("valid byte"), vec![0x2f]);
     }
 
     #[test]
