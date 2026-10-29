@@ -62,7 +62,7 @@ function sizeGroup(bytes: number): string {
 
 function modifiedYear(epochMs: number | null): string {
   if (epochMs === null || !Number.isFinite(epochMs)) return "unknown";
-  const year = new Date(epochMs).getUTCFullYear();
+  const year = new Date(epochMs).getFullYear();
   return Number.isFinite(year) ? String(year) : "unknown";
 }
 
