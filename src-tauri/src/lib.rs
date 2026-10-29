@@ -1202,10 +1202,10 @@ pub fn run() {
 mod tests {
     use super::{
         bounded_utf8_text, canonical_child, canonical_scan_directory, classify, decode_path,
-        encode_path, matches_name, normalize_query, register_search_session, scan_directory,
+        decode_units, encode_path, matches_name, normalize_query, register_search_session, scan_directory,
         should_emit_progress, validate_export_lines, validate_file_types, validate_query,
         MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES, MAX_EXPORT_TOTAL_BYTES,
-        MAX_QUERY_BYTES, MAX_QUERY_TOKENS, MAX_TEXT_BYTES,
+        MAX_PATH_KEY_UNITS, MAX_QUERY_BYTES, MAX_QUERY_TOKENS, MAX_TEXT_BYTES,
     };
     use std::{
         collections::{HashMap, HashSet},
