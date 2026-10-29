@@ -40,3 +40,13 @@ test("import rejects invisible control characters in preset names and queries", 
     preset("Tab query", "one\ttwo"),
   ]), [preset("Good", "invoice")]);
 });
+
+test("import rejects C1 controls in preset names and queries", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  assert.deepEqual(parsePresets([
+    preset("C1\u0085Name", "invoice"),
+    preset("C1\u009fName", "invoice"),
+    preset("Bad query", "invoice\u009bsecret"),
+    preset("Good", "invoice"),
+  ]), [preset("Good", "invoice")]);
+});
