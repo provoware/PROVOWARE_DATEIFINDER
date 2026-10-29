@@ -309,11 +309,11 @@ if ! node -e 'const p=require("./package.json");if(!p.scripts||!p.scripts.tauri)
   fail "Das Projekt enthält keinen npm-Startbefehl namens 'tauri'. Bitte package.json prüfen."
 fi
 
-tauri_major="$(node -e 'const p=require("./package.json");const v=p.devDependencies?.["@tauri-apps/cli"]||p.dependencies?.["@tauri-apps/cli"]||"";const m=v.match(/[12](?=\.)/);console.log(m?m[0]:"unknown")')"
+tauri_major="$(node -e 'const p=require("./package.json");const v=p.devDependencies?.["@tauri-apps/cli"]||p.dependencies?.["@tauri-apps/cli"]||"";const m=/^[~^]?(\d+)\./.exec(v.trim());console.log(m?m[1]:"unknown")')"
 if [[ "$tauri_major" == 1 ]]; then
   fail "Dieses Projekt verwendet offenbar Tauri 1. Für dessen Systempakete wird eine eigene, geprüfte Startvariante benötigt."
-elif [[ "$tauri_major" == unknown ]]; then
-  say "  ! Tauri-Version nicht eindeutig erkennbar; Systemreparatur bleibt vorsichtig."
+elif [[ "$tauri_major" != 2 ]]; then
+  fail "Tauri-Version ${tauri_major} ist nicht als Tauri 2 bestätigt. Keine Systemreparatur oder Programmstart."
 fi
 
 PHASE="Linux-Systembibliotheken prüfen"
