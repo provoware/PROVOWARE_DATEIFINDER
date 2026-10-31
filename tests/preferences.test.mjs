@@ -96,3 +96,25 @@ test("saving and reloading presets enforce the same control-character rules", ()
   assert.equal(isValidPresetContent("Rechnungen 2026", "rechnung 2026"), true);
   assert.equal(parsePresets([preset("Rechnungen 2026", "rechnung 2026")]).length, 1);
 });
+
+test("preset import and saving reject invisible Unicode layout and bidi controls", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  const invisible = ["\u061c", "\u200e", "\u200f", "\u2028", "\u2029", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069", "\u206a", "\u206f"];
+  for (const character of invisible) {
+    for (const [name, query] of [
+      [`Rechnung${character}2026`, "rechnung"],
+      ["Rechnung", `rechnung${character}2026`],
+    ]) {
+      assert.equal(isValidPresetContent(name, query), false, `U+${character.codePointAt(0)?.toString(16)}`);
+      assert.deepEqual(parsePresets([preset(name, query)]), []);
+    }
+  }
+});
+
+test("ordinary Unicode and emoji joiners remain valid in presets", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  for (const [name, query] of [["Büro", "🧑‍💻"], ["صور", "ملف"], ["Rechnungen", "rechnung 2026"]]) {
+    assert.equal(isValidPresetContent(name, query), true);
+    assert.deepEqual(parsePresets([preset(name, query)]), [preset(name, query)]);
+  }
+});
