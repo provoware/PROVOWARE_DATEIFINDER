@@ -29,3 +29,24 @@ test("template import limit and zoom input never produce unbounded settings", ()
   assert.equal(normalizeZoom(Number.NaN), 1);
   assert.equal(normalizeZoom("1.5"), 1);
 });
+
+test("import rejects invisible control characters in preset names and queries", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  assert.deepEqual(parsePresets([
+    preset("Good", "invoice"),
+    preset("Bad\nName", "invoice"),
+    preset("Hidden\u0000Name", "invoice"),
+    preset("Bad query", "invoice\u0000secret"),
+    preset("Tab query", "one\ttwo"),
+  ]), [preset("Good", "invoice")]);
+});
+
+test("import rejects C1 controls in preset names and queries", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  assert.deepEqual(parsePresets([
+    preset("C1\u0085Name", "invoice"),
+    preset("C1\u009fName", "invoice"),
+    preset("Bad query", "invoice\u009bsecret"),
+    preset("Good", "invoice"),
+  ]), [preset("Good", "invoice")]);
+});

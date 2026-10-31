@@ -126,6 +126,29 @@ test("interactive search uses the injected platform contract and handles events"
   await expect(page.locator("#cancel-search")).toBeDisabled();
 });
 
+test("result dates show the Unix epoch and reject invalid timestamps without crashing", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await installSearchAdapter(page, {
+    itemCount: 4,
+    names: ["a-epoch.txt", "b-invalid.txt", "c-missing.txt", "d-ordinary.txt"],
+    modifiedTimes: [0, 9e15, null, Date.UTC(2026, 9, 28)],
+  });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("test");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("4 Dateien gefunden");
+  const expectedDates = await page.evaluate(() => [
+    new Intl.DateTimeFormat("de-DE").format(new Date(0)),
+    "–",
+    "–",
+    new Intl.DateTimeFormat("de-DE").format(new Date(Date.UTC(2026, 9, 28))),
+  ]);
+  await expect(page.locator(".file-date")).toHaveText(expectedDates);
+  expect(pageErrors).toEqual([]);
+});
+
 test("result selection keeps keyboard focus and exposes a concise selection summary", async ({ page }) => {
   await installSearchAdapter(page);
   await page.goto("/");
