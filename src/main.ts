@@ -5,7 +5,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
+import { formatDate } from "./date-format";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
+import { isSearchQueryWithinByteLimit } from "./search-query";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -228,13 +230,6 @@ function formatBytes(bytes: number): string {
   return `${value.toLocaleString("de-DE", { maximumFractionDigits: digits })} ${unit}`;
 }
 
-function formatDate(epochMs: number | null): string {
-  if (!epochMs) return "–";
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(epochMs));
-}
 
 const settings = new LazyStore("settings.json");
 
@@ -1146,7 +1141,19 @@ function useSourceRoot(root: PickedRoot): void {
   ui.query.focus();
 }
 
+let searchStartPending = false;
+
 async function runSearch(): Promise<void> {
+  if (searchStartPending) return;
+  searchStartPending = true;
+  try {
+    await runSearchUnlocked();
+  } finally {
+    searchStartPending = false;
+  }
+}
+
+async function runSearchUnlocked(): Promise<void> {
   if (state.fileActionBusy) {
     setStatus("Dateiaktion läuft", "Bitte vor der nächsten Suche die Dateiaktion abschließen.", "warning");
     return;
@@ -1161,6 +1168,12 @@ async function runSearch(): Promise<void> {
 
   if (!query) {
     setStatus("Suchbegriff fehlt", "Bitte mindestens ein Wort eingeben.", "error");
+    ui.query.focus();
+    return;
+  }
+
+  if (!isSearchQueryWithinByteLimit(query)) {
+    setStatus("Suchbegriff zu lang", "Maximal 4.096 Byte in UTF-8 erlaubt. Bitte den Suchbegriff kürzen.", "error");
     ui.query.focus();
     return;
   }
@@ -1432,7 +1445,7 @@ async function initialize(): Promise<void> {
   ui.presetSave.addEventListener("click", async () => {
     const name = (ui.presetName.value.trim() || ui.query.value.trim().slice(0, 48)).trim();
     const query = ui.query.value.trim();
-    if (!name || !query || query.length > 4096) {
+    if (!name || !query || !isSearchQueryWithinByteLimit(query)) {
       ui.presetFeedback.textContent = "Bitte erst Suchwörter und einen kurzen Namen eingeben.";
       return;
     }

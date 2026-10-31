@@ -186,6 +186,28 @@ test('Fehlende npm-Pakete werden bei --no-repair nicht verändert', () => {
   } finally { f.cleanup(); }
 });
 
+test('Erstinstallation ohne Zustimmung führt kein npm ci aus', () => {
+  const f = fixture({ modules: false });
+  try {
+    writeFileSync(join(f.directory, 'package-lock.json'), '{}\n');
+    const result = f.run([]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /Erstinstallation nicht freigegeben/);
+    assert.doesNotMatch(f.callsText(), /^ci|^install|run tauri/m);
+  } finally { f.cleanup(); }
+});
+
+test('Erstinstallation mit --yes nutzt npm ci und startet', () => {
+  const f = fixture({ modules: false });
+  try {
+    writeFileSync(join(f.directory, 'package-lock.json'), '{}\n');
+    const result = f.run(['--yes']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(f.callsText(), /^ci --ignore-scripts --no-audit --no-fund$/m);
+    assert.match(f.callsText(), /run tauri -- dev/);
+  } finally { f.cleanup(); }
+});
+
 test('Systemreparatur wird bei --check niemals ausgeführt', () => {
   const f = fixture({ packages: false });
   try {
@@ -308,3 +330,30 @@ test('Später Portkonflikt wird höchstens einmal nach sicherem Stopp neu versuc
     assert.equal(f.callsText().match(/run tauri -- dev/g)?.length, 2);
   } finally { vite.kill('SIGTERM'); f.cleanup(); }
 });
+
+test('Tauri-Versionsprüfung akzeptiert kompatible Versionspräfixe', () => {
+  const f = fixture();
+  try {
+    writeFileSync(join(f.directory, 'package.json'), JSON.stringify({
+      scripts: { tauri: 'tauri' }, devDependencies: { '@tauri-apps/cli': '^2.11.4' },
+    }));
+    const result = f.run(['--check']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Vorprüfung erfolgreich/);
+  } finally { f.cleanup(); }
+});
+
+for (const version of ['^3.2.0', '12.0.0']) {
+  test(`Nicht unterstützte Tauri-Version ${version} stoppt vor Systemänderungen`, () => {
+    const f = fixture({ packages: false });
+    try {
+      writeFileSync(join(f.directory, 'package.json'), JSON.stringify({
+        scripts: { tauri: 'tauri' }, devDependencies: { '@tauri-apps/cli': version },
+      }));
+      const result = f.run(['--yes']);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stdout, /nicht als Tauri 2 bestätigt/);
+      assert.doesNotMatch(f.callsText(), /SUDO_CALLED|CURL_CALLED|run tauri/);
+    } finally { f.cleanup(); }
+  });
+}

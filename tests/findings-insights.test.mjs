@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { addFindingsBatch, createFindingsStats, insightGroups } from "../src/findings-insights.ts";
 
@@ -24,7 +25,7 @@ test("type overview uses the same four kinds as colored result rows", () => {
 
 test("year overview groups old and missing dates without losing any finds", () => {
   const stats = createFindingsStats();
-  addFindingsBatch(stats, Array.from({ length: 9 }, (_, index) => file("image", 1, Date.UTC(2017 + index, 0, 1))));
+  addFindingsBatch(stats, Array.from({ length: 9 }, (_, index) => file("image", 1, Date.UTC(2017 + index, 6, 1))));
   addFindingsBatch(stats, [file("image", 1, null), file("image", 1, Number.NaN)]);
   const groups = insightGroups(stats, "year");
   assert.deepEqual(groups.map((group) => group.label), ["2025", "2024", "2023", "2022", "2021", "Ältere", "Ohne Datum"]);
@@ -58,4 +59,36 @@ test("a new search gets a fresh independent overview", () => {
   addFindingsBatch(next, [file("text", 1, null)]);
   assert.deepEqual(counts(insightGroups(next, "type")), { Sonstige: 1 });
   assert.deepEqual(counts(insightGroups(former, "type")), { Audio: 1 });
+});
+
+test("year overview follows the local calendar year shown in file details", () => {
+  const moduleUrl = new URL("../src/findings-insights.ts", import.meta.url).href;
+  const script = `
+    import { addFindingsBatch, createFindingsStats, insightGroups } from ${JSON.stringify(moduleUrl)};
+    const stats = createFindingsStats();
+    addFindingsBatch(stats, [{ kind: "image", sizeBytes: 1, modifiedAt: Date.UTC(2026, 0, 1, 0, 30) }]);
+    process.stdout.write(JSON.stringify(insightGroups(stats, "year").map((group) => group.label)));
+  `;
+  for (const [timeZone, expectedYear] of [["America/Los_Angeles", "2025"], ["Europe/Berlin", "2026"]]) {
+    const child = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {
+      encoding: "utf8",
+      env: { ...process.env, TZ: timeZone },
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.deepEqual(JSON.parse(child.stdout), [expectedYear], timeZone);
+  }
+});
+
+test("size aggregation rejects malformed sizes and cannot overflow", () => {
+  const stats = createFindingsStats();
+  addFindingsBatch(stats, [
+    file("image", Number.MAX_SAFE_INTEGER, null),
+    file("image", Number.MAX_SAFE_INTEGER, null),
+    file("image", 0.5, null),
+    file("image", Number.MAX_SAFE_INTEGER + 1, null),
+    file("image", 1, null),
+  ]);
+  assert.equal(stats.total, 5);
+  assert.equal(stats.totalBytes, Number.MAX_SAFE_INTEGER);
+  assert.equal(counts(insightGroups(stats, "size")).Unbekannt, 2);
 });
