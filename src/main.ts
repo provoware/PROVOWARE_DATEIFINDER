@@ -4,9 +4,12 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { formatExportLine } from "./export-lines";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
+import { formatDate } from "./date-format";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
+import { isSearchQueryWithinByteLimit } from "./search-query";
+import { validActionName } from "./file-action-names";
+import { formatExportLine } from "./export-lines";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -229,13 +232,6 @@ function formatBytes(bytes: number): string {
   return `${value.toLocaleString("de-DE", { maximumFractionDigits: digits })} ${unit}`;
 }
 
-function formatDate(epochMs: number | null): string {
-  if (!epochMs) return "–";
-  return new Intl.DateTimeFormat("de-DE", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(epochMs));
-}
 
 const settings = new LazyStore("settings.json");
 
@@ -745,6 +741,10 @@ function renderPreview(): void {
         if (lastPreviewRequest === requestKey) ui.textPreview.textContent = `Textvorschau nicht verfügbar: ${safeMessage(error)}`;
       });
     }
+  } else {
+    // Beim Wechsel zu Nicht-Text das veraltete Vorschaumerkmal löschen.
+    lastPreviewRequest = "";
+    ui.textPreview.textContent = "";
   }
 }
 
@@ -802,6 +802,13 @@ function focusResultAt(index: number): void {
   target?.focus({ preventScroll: true });
 }
 
+function formatResultRowDate(epochMs: number | null): string {
+  if (epochMs === null || !Number.isFinite(epochMs)) return "–";
+  const date = new Date(epochMs);
+  if (Number.isNaN(date.getTime())) return "–";
+  return new Intl.DateTimeFormat("de-DE").format(date);
+}
+
 function renderVisibleResultRows(): void {
   const focusedRow = document.activeElement instanceof HTMLElement
     ? document.activeElement.closest<HTMLButtonElement>(".result-row")
@@ -849,9 +856,7 @@ function renderVisibleResultRows(): void {
 
     const date = document.createElement("span");
     date.className = "file-date";
-    date.textContent = file.modifiedAt
-      ? new Intl.DateTimeFormat("de-DE").format(new Date(file.modifiedAt))
-      : "–";
+    date.textContent = formatResultRowDate(file.modifiedAt);
 
     row.append(checkbox, icon, name, path, size, date);
     row.addEventListener("click", () => {
@@ -952,12 +957,6 @@ function render(): void {
   renderSearchOptions();
   renderPresets();
   renderResults();
-}
-
-function validActionName(name: string): boolean {
-  return name.length > 0 && name.length <= 100 && name === name.trim()
-    && !name.startsWith(".") && !name.endsWith(".")
-    && !/[\\/:*?"<>|\x00-\x1f\x7f]/.test(name);
 }
 
 function showFileAction(kind: FileActionKind): void {
@@ -1142,7 +1141,19 @@ function useSourceRoot(root: PickedRoot): void {
   ui.query.focus();
 }
 
+let searchStartPending = false;
+
 async function runSearch(): Promise<void> {
+  if (searchStartPending) return;
+  searchStartPending = true;
+  try {
+    await runSearchUnlocked();
+  } finally {
+    searchStartPending = false;
+  }
+}
+
+async function runSearchUnlocked(): Promise<void> {
   if (state.fileActionBusy) {
     setStatus("Dateiaktion läuft", "Bitte vor der nächsten Suche die Dateiaktion abschließen.", "warning");
     return;
@@ -1157,6 +1168,12 @@ async function runSearch(): Promise<void> {
 
   if (!query) {
     setStatus("Suchbegriff fehlt", "Bitte mindestens ein Wort eingeben.", "error");
+    ui.query.focus();
+    return;
+  }
+
+  if (!isSearchQueryWithinByteLimit(query)) {
+    setStatus("Suchbegriff zu lang", "Maximal 4.096 Byte in UTF-8 erlaubt. Bitte den Suchbegriff kürzen.", "error");
     ui.query.focus();
     return;
   }
@@ -1428,7 +1445,7 @@ async function initialize(): Promise<void> {
   ui.presetSave.addEventListener("click", async () => {
     const name = (ui.presetName.value.trim() || ui.query.value.trim().slice(0, 48)).trim();
     const query = ui.query.value.trim();
-    if (!name || !query || query.length > 4096) {
+    if (!name || !query || !isSearchQueryWithinByteLimit(query)) {
       ui.presetFeedback.textContent = "Bitte erst Suchwörter und einen kurzen Namen eingeben.";
       return;
     }

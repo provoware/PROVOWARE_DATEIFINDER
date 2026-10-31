@@ -71,6 +71,7 @@ jobs:
         id: quick
         run: |
           node --test tests/hardening/source-contracts.mjs
+          node --test tests/playwright-config-contracts.mjs
           npm run typecheck
 
       - name: TIEF - build fmt clippy and complete Rust suite
