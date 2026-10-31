@@ -9,6 +9,7 @@ import { formatDate } from "./date-format";
 import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 import { isSearchQueryWithinByteLimit } from "./search-query";
 import { validActionName } from "./file-action-names";
+import { formatExportLine } from "./export-lines";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -1603,7 +1604,7 @@ async function initialize(): Promise<void> {
   });
 
   ui.export.addEventListener("click", async () => {
-    const lines = state.results.map((file) => `${file.displayName}\t${file.path}\t${file.sizeBytes}`);
+    const lines = state.results.map(formatExportLine);
     const saved = await exportResults(lines).catch((error) => {
       setStatus("Liste konnte nicht gespeichert werden", safeMessage(error), "error");
       return false;

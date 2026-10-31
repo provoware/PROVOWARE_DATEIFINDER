@@ -16,6 +16,7 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 - ✅ Sortierung, Mehrfachauswahl, Vorschau-Metadaten
 - ✅ Datei öffnen / im Dateimanager anzeigen
 - ✅ TXT-Export
+  - Dateinamen mit Tabulatoren, Zeilenumbrüchen oder Steuerzeichen bleiben beim TXT-Export je Datei in einer Zeile. Sonderzeichen erscheinen als sichtbare Folgen wie `\\t`, `\\n` und `\\\\`.
 - ✅ serverseitige Root-Freigabe: Desktop-Suchorte werden im Rust-Kern registriert
 - ✅ minimale plattformspezifische Capabilities
 - ✅ responsive Mobile-Basis
