@@ -1037,6 +1037,15 @@ fn validated_allowed_file(
     }
 
     let file = decode_path(path_key)?;
+    // Die kanonische Pfadprüfung allein würde einen Link auf eine andere
+    // Datei innerhalb des Suchorts als gültige Datei akzeptieren.
+    if fs::symlink_metadata(&file)
+        .map_err(|error| format!("Datei ist nicht verfügbar: {error}"))?
+        .file_type()
+        .is_symlink()
+    {
+        return Err("Symbolische Verknüpfungen können nicht als Dateien verwendet werden.".into());
+    }
     let validated = canonical_child(&root, &file)?;
     if !validated.is_file() {
         return Err("Die ausgewählte Datei ist nicht mehr vorhanden.".into());
@@ -1589,6 +1598,40 @@ mod tests {
 
         let _ = fs::remove_dir_all(root);
         let _ = fs::remove_dir_all(outside_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validated_allowed_file_rejects_symlink_inside_approved_root() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_test_dir("approved-file-symlink");
+        let original = root.join("original.txt");
+        fs::write(&original, b"Original bleibt erhalten").expect("create original");
+        let link = root.join("selected.txt");
+        symlink(&original, &link).expect("create internal symlink");
+
+        let allowed = super::AllowedRoots::default();
+        allowed
+            .0
+            .lock()
+            .expect("root registry")
+            .insert(root.canonicalize().expect("root"));
+        let root_key = encode_path(&root);
+        assert_eq!(
+            super::validated_allowed_file(&allowed, &root_key, &encode_path(&original))
+                .expect("regular file is permitted"),
+            original
+        );
+        assert!(
+            super::validated_allowed_file(&allowed, &root_key, &encode_path(&link)).is_err(),
+            "an internal symlink must not silently select its target"
+        );
+        assert_eq!(
+            fs::read(&original).expect("original unchanged"),
+            b"Original bleibt erhalten"
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
