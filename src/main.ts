@@ -6,7 +6,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
 import { formatDate } from "./date-format";
-import { MAX_PRESETS, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
+import { MAX_PRESETS, isSearchQueryWithinTokenLimit, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 import { isSearchQueryWithinByteLimit } from "./search-query";
 import { validActionName } from "./file-action-names";
 import { formatExportLine } from "./export-lines";
@@ -1178,6 +1178,12 @@ async function runSearchUnlocked(): Promise<void> {
     return;
   }
 
+  if (!isSearchQueryWithinTokenLimit(query)) {
+    setStatus("Zu viele Suchwörter", "Maximal 64 Wörter pro Suche erlaubt.", "error");
+    ui.query.focus();
+    return;
+  }
+
   if (!state.sourcePathKey) {
     setStatus("Suchort fehlt", "Bitte zuerst unter „Orte“ einen Ordner auswählen.", "error");
     focusSourcePicker();
@@ -1445,8 +1451,8 @@ async function initialize(): Promise<void> {
   ui.presetSave.addEventListener("click", async () => {
     const name = (ui.presetName.value.trim() || ui.query.value.trim().slice(0, 48)).trim();
     const query = ui.query.value.trim();
-    if (!name || !query || !isSearchQueryWithinByteLimit(query)) {
-      ui.presetFeedback.textContent = "Bitte erst Suchwörter und einen kurzen Namen eingeben.";
+    if (!name || !query || !isSearchQueryWithinByteLimit(query) || !isSearchQueryWithinTokenLimit(query)) {
+      ui.presetFeedback.textContent = "Bitte gültige Suchwörter (maximal 64) und einen kurzen Namen eingeben.";
       return;
     }
     const existing = searchPresets.findIndex((preset) => preset.name.toLocaleLowerCase("de-DE") === name.toLocaleLowerCase("de-DE"));
