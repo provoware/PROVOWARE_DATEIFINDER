@@ -309,11 +309,11 @@ if ! node -e 'const p=require("./package.json");if(!p.scripts||!p.scripts.tauri)
   fail "Das Projekt enthält keinen npm-Startbefehl namens 'tauri'. Bitte package.json prüfen."
 fi
 
-tauri_major="$(node -e 'const p=require("./package.json");const v=p.devDependencies?.["@tauri-apps/cli"]||p.dependencies?.["@tauri-apps/cli"]||"";const m=v.match(/[12](?=\.)/);console.log(m?m[0]:"unknown")')"
+tauri_major="$(node -e 'const p=require("./package.json");const v=p.devDependencies?.["@tauri-apps/cli"]||p.dependencies?.["@tauri-apps/cli"]||"";const m=/^[~^]?(\d+)\./.exec(v.trim());console.log(m?m[1]:"unknown")')"
 if [[ "$tauri_major" == 1 ]]; then
   fail "Dieses Projekt verwendet offenbar Tauri 1. Für dessen Systempakete wird eine eigene, geprüfte Startvariante benötigt."
-elif [[ "$tauri_major" == unknown ]]; then
-  say "  ! Tauri-Version nicht eindeutig erkennbar; Systemreparatur bleibt vorsichtig."
+elif [[ "$tauri_major" != 2 ]]; then
+  fail "Tauri-Version ${tauri_major} ist nicht als Tauri 2 bestätigt. Keine Systemreparatur oder Programmstart."
 fi
 
 PHASE="Linux-Systembibliotheken prüfen"
@@ -387,6 +387,9 @@ if [[ ! -d node_modules ]] || ! npm ls --depth=0 --silent >>"$LOG_FILE" 2>&1; th
   fi
   if [[ ! -d node_modules && -f package-lock.json ]]; then
     say "  ! Erstinstallation anhand der festen Paketliste erforderlich."
+    if ! consent "JavaScript-Bausteine anhand der festen Paketliste installieren (npm ci)?"; then
+      fail "Erstinstallation nicht freigegeben. Es wurden keine JavaScript-Pakete installiert."
+    fi
     run_step "JavaScript-Bausteine installieren (npm ci)" npm ci --ignore-scripts --no-audit --no-fund
   else
     say "  ! Bestehende Pakete sind unvollständig. npm repariert die Installation."
