@@ -5,7 +5,8 @@ export interface ExportableFile {
   sizeBytes: number;
 }
 
-const SPECIAL_CHARACTERS = /[\\\p{Cc}\p{Zl}\p{Zp}]/gu;
+// Escape bidi controls so TXT viewers cannot visually reorder filenames or columns.
+const SPECIAL_CHARACTERS = /[\\\p{Cc}\p{Zl}\p{Zp}\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/gu;
 
 function escapeExportField(value: string): string {
   return value.replace(SPECIAL_CHARACTERS, (character) => {
