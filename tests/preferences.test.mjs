@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parsePresets, normalizeZoom, MAX_PRESETS, isSearchQueryWithinTokenLimit } from "../src/preferences.ts";
+import { parsePresets, normalizeZoom, MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent } from "../src/preferences.ts";
 import { isSearchQueryWithinByteLimit } from "../src/search-query.ts";
 
 test("templates accept only meaningful bounded search settings", () => {
@@ -78,4 +78,21 @@ test("saved searches reject more than Rust's 64 Unicode whitespace-separated wor
   assert.equal(parsePresets([preset(words(64))]).length, 1);
   assert.equal(parsePresets([preset(words(65))]).length, 0);
   assert.equal(parsePresets([preset(words(65, "\u2003"))]).length, 0);
+});
+
+
+test("saving and reloading presets enforce the same control-character rules", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  for (const [name, query] of [
+    ["Rechnungen\u0085Alt", "rechnung"],
+    ["Rechnungen", "rechnung\u009balt"],
+    ["Rechnungen\nAlt", "rechnung"],
+    ["Rechnungen", "rechnung\u0000alt"],
+    ["x".repeat(49), "rechnung"],
+  ]) {
+    assert.equal(isValidPresetContent(name, query), false, JSON.stringify({ name, query }));
+    assert.deepEqual(parsePresets([preset(name, query)]), []);
+  }
+  assert.equal(isValidPresetContent("Rechnungen 2026", "rechnung 2026"), true);
+  assert.equal(parsePresets([preset("Rechnungen 2026", "rechnung 2026")]).length, 1);
 });
