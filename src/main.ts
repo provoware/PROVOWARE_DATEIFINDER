@@ -739,6 +739,10 @@ function renderPreview(): void {
         if (lastPreviewRequest === requestKey) ui.textPreview.textContent = `Textvorschau nicht verfügbar: ${safeMessage(error)}`;
       });
     }
+  } else {
+    // Beim Wechsel zu Nicht-Text das veraltete Vorschaumerkmal löschen.
+    lastPreviewRequest = "";
+    ui.textPreview.textContent = "";
   }
 }
 
