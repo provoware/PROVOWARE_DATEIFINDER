@@ -51,7 +51,7 @@ function increment(map: Map<string, number>, key: string): void {
 }
 
 function sizeGroup(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return "unknown";
+  if (!Number.isSafeInteger(bytes) || bytes < 0) return "unknown";
   if (bytes === 0) return "empty";
   if (bytes < MIB) return "small";
   if (bytes < 10 * MIB) return "medium";
@@ -69,7 +69,10 @@ function modifiedYear(epochMs: number | null): string {
 export function addFindingsBatch(stats: FindingsStats, items: readonly InsightFile[]): void {
   for (const file of items) {
     stats.total += 1;
-    if (Number.isFinite(file.sizeBytes) && file.sizeBytes >= 0) stats.totalBytes += file.sizeBytes;
+    if (Number.isSafeInteger(file.sizeBytes) && file.sizeBytes >= 0) {
+      // Bei beschädigten Daten keine ungenauen Summen bilden.
+      stats.totalBytes = Math.min(Number.MAX_SAFE_INTEGER, stats.totalBytes + file.sizeBytes);
+    }
     increment(stats.kinds, KIND_GROUPS.some((group) => group.key === file.kind) ? file.kind : "text");
     increment(stats.years, modifiedYear(file.modifiedAt));
     increment(stats.sizes, sizeGroup(file.sizeBytes));
