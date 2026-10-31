@@ -204,7 +204,6 @@ test("desktop opens at the reference size but can resize to a smaller safe minim
   assert.equal(main.resizable, true);
 });
 
-
 test("file-action names enforce the Rust limit of 100 UTF-8 bytes", () => {
   assert.equal(validActionName("a".repeat(100)), true);
   assert.equal(validActionName("a".repeat(101)), false);

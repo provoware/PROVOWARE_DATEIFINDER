@@ -22,6 +22,7 @@ async function installSearchAdapter(
     } = testOptions;
     const runtime = window as typeof window & {
       __lastSearchRequest?: unknown;
+      __previewRequests?: number;
       __lastFileActionRequest?: unknown;
       __cancelledAction?: string;
       __fileActionProgress?: (payload: { sessionId: string; completed: number; total: number; bytesCompleted: number; bytesTotal: number; bytesPerSecond: number; phase: string }) => void;
@@ -47,6 +48,7 @@ async function installSearchAdapter(
         return { path: "/test/Dokumente", pathKey: "test-root" };
       },
       async previewText() {
+        runtime.__previewRequests = (runtime.__previewRequests ?? 0) + 1;
         return previewContent;
       },
       async listenSearchEvents(listeners) {
@@ -122,6 +124,29 @@ test("interactive search uses the injected platform contract and handles events"
   await expect(page.locator("#status-progress")).toBeHidden();
   await expect(page.locator("#status-announcer")).toHaveText("1 Datei gefunden. 1 geprüft · 4 ms");
   await expect(page.locator("#cancel-search")).toBeDisabled();
+});
+
+test("result dates show the Unix epoch and reject invalid timestamps without crashing", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await installSearchAdapter(page, {
+    itemCount: 4,
+    names: ["a-epoch.txt", "b-invalid.txt", "c-missing.txt", "d-ordinary.txt"],
+    modifiedTimes: [0, 9e15, null, Date.UTC(2026, 9, 28)],
+  });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("test");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("4 Dateien gefunden");
+  const expectedDates = await page.evaluate(() => [
+    new Intl.DateTimeFormat("de-DE").format(new Date(0)),
+    "–",
+    "–",
+    new Intl.DateTimeFormat("de-DE").format(new Date(Date.UTC(2026, 9, 28))),
+  ]);
+  await expect(page.locator(".file-date")).toHaveText(expectedDates);
+  expect(pageErrors).toEqual([]);
 });
 
 test("result selection keeps keyboard focus and exposes a concise selection summary", async ({ page }) => {
@@ -606,4 +631,34 @@ test("search help explains the existing matcher in plain language", async ({ pag
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(helpButton).toBeFocused();
+});
+
+test("non-text selection clears cached text preview and reloads on return", async ({ page }) => {
+  await installSearchAdapter(page, {
+    itemCount: 2,
+    kinds: ["text", "image"],
+    names: ["a-notiz.txt", "z-bild.png"],
+    extensions: ["txt", "png"],
+  });
+  await page.goto("/");
+  await page.locator("#choose-source-nav").click();
+  await page.locator("#query-input").fill("notiz");
+  await page.locator("#search-button").click();
+  await expect(page.locator("#status-title")).toHaveText("2 Dateien gefunden");
+
+  const rows = page.locator(".result-row");
+  await expect(rows).toHaveCount(2);
+  await rows.nth(0).click();
+  await expect(page.locator("#text-preview")).toContainText("Beispieltext");
+  const previewRequests = () => page.evaluate(() =>
+    (window as typeof window & { __previewRequests?: number }).__previewRequests ?? 0);
+  await expect.poll(previewRequests).toBe(1);
+
+  await rows.nth(1).click();
+  await expect(page.locator("#text-preview")).toBeHidden();
+  await expect(page.locator("#text-preview")).toBeEmpty();
+
+  await rows.nth(0).click();
+  await expect.poll(previewRequests).toBe(2);
+  await expect(page.locator("#text-preview")).toContainText("Beispieltext");
 });
