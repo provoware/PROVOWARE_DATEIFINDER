@@ -62,7 +62,7 @@ function sizeGroup(bytes: number): string {
 
 function modifiedYear(epochMs: number | null): string {
   if (epochMs === null || !Number.isFinite(epochMs)) return "unknown";
-  const year = new Date(epochMs).getUTCFullYear();
+  const year = new Date(epochMs).getFullYear();
   return Number.isFinite(year) ? String(year) : "unknown";
 }
 
@@ -70,7 +70,7 @@ export function addFindingsBatch(stats: FindingsStats, items: readonly InsightFi
   for (const file of items) {
     stats.total += 1;
     if (Number.isSafeInteger(file.sizeBytes) && file.sizeBytes >= 0) {
-      // Die Anzeige darf bei vielen großen Treffern weder ungenau noch unendlich werden.
+      // Bei beschädigten Daten keine ungenauen Summen bilden.
       stats.totalBytes = Math.min(Number.MAX_SAFE_INTEGER, stats.totalBytes + file.sizeBytes);
     }
     increment(stats.kinds, KIND_GROUPS.some((group) => group.key === file.kind) ? file.kind : "text");

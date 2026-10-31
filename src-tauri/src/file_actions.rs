@@ -251,6 +251,16 @@ pub(crate) fn preflight_sources(
     let mut total_bytes = 0u64;
     let mut verified = Vec::with_capacity(sources.len());
     for source in sources {
+        // Vor der Kanonisierung prüfen: sonst sieht ein interner Symlink
+        // nach dem Auflösen wie eine reguläre Datei im freigegebenen Ordner aus.
+        let original_type = fs::symlink_metadata(source)
+            .map_err(|error| format!("Datei fehlt: {error}"))?
+            .file_type();
+        if original_type.is_symlink() {
+            return Err(
+                "Verknüpfungen und besondere Dateitypen können nicht verarbeitet werden.".into(),
+            );
+        }
         let path = source
             .canonicalize()
             .map_err(|error| format!("Datei fehlt: {error}"))?;
@@ -984,6 +994,28 @@ mod tests {
         }));
         assert!(events.windows(2).all(|pair| pair[0].2 <= pair[1].2));
         assert_eq!(events.last().map(|event| event.2), Some(expected));
+        fs::remove_dir_all(root).expect("cleanup fixture");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preflight_rejects_internal_source_symlink_before_canonicalization() {
+        use std::os::unix::fs::symlink;
+
+        let root = fixture();
+        let original = root.join("original.txt");
+        let link = root.join("auswahl.txt");
+        fs::write(&original, "Originaldaten").expect("original");
+        symlink(&original, &link).expect("internal symlink");
+
+        assert!(preflight_sources(&root, std::slice::from_ref(&original)).is_ok());
+        let error = preflight_sources(&root, std::slice::from_ref(&link))
+            .expect_err("internal symlink must be rejected");
+        assert!(error.contains("Verknüpfungen"), "{error}");
+        assert_eq!(
+            fs::read(&original).expect("original intact"),
+            b"Originaldaten"
+        );
         fs::remove_dir_all(root).expect("cleanup fixture");
     }
 }
