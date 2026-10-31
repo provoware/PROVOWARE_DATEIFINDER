@@ -15,6 +15,12 @@ export const MAX_ZOOM = 1.5;
 const FILE_KINDS: SavedFileKind[] = ["image", "document", "audio", "text"];
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 
+// Gleiche Prüfung beim Speichern und beim erneuten Laden von Suchvorlagen.
+export function isValidPresetContent(name: string, query: string): boolean {
+  return name.length > 0 && name.length <= 48 && query.length > 0
+    && !CONTROL_CHARS.test(name) && !CONTROL_CHARS.test(query);
+}
+
 // Entspricht Rusts split_whitespace() und MAX_QUERY_TOKENS.
 export function isSearchQueryWithinTokenLimit(query: string): boolean {
   return query.split(/\p{White_Space}+/u).filter(Boolean).length <= MAX_SEARCH_QUERY_TOKENS;
@@ -29,8 +35,7 @@ export function parsePresets(value: unknown): SearchPreset[] {
     const item = candidate as Record<string, unknown>;
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const query = typeof item.query === "string" ? item.query.trim() : "";
-    if (!name || name.length > 48 || !query || query.length > 4096 || new TextEncoder().encode(query).length > 4096 || !isSearchQueryWithinTokenLimit(query)) continue;
-    if (CONTROL_CHARS.test(name) || CONTROL_CHARS.test(query)) continue;
+    if (!isValidPresetContent(name, query) || query.length > 4096 || new TextEncoder().encode(query).length > 4096 || !isSearchQueryWithinTokenLimit(query)) continue;
     const key = name.toLocaleLowerCase("de-DE");
     if (seen.has(key)) continue;
     if (item.matchMode !== "all" && item.matchMode !== "any") continue;
