@@ -24,6 +24,9 @@ const MAX_EXPORT_LINES: usize = 250_000;
 const MAX_EXPORT_LINE_BYTES: usize = 32_768;
 const MAX_EXPORT_TOTAL_BYTES: usize = 64 * 1024 * 1024;
 const MAX_QUERY_BYTES: usize = 4_096;
+// Begrenzung für untrusted IPC-Dateischlüssel vor der Hex-Dekodierung.
+// 32.768 UTF-16-Einheiten decken auch lange Windows-Pfade ab.
+const MAX_PATH_KEY_UNITS: usize = 32_768;
 const MAX_QUERY_TOKENS: usize = 64;
 const MAX_ACTIVE_SEARCHES: usize = 4;
 const PROGRESS_INTERVAL: usize = 250;
@@ -279,7 +282,7 @@ where
 }
 
 fn decode_units(value: &str, width: usize) -> Result<Vec<u32>, String> {
-    if value.len() % width != 0 {
+    if width == 0 || value.len() % width != 0 || value.len() / width > MAX_PATH_KEY_UNITS {
         return Err("Ungültiger Dateischlüssel.".into());
     }
     value
@@ -1034,6 +1037,15 @@ fn validated_allowed_file(
     }
 
     let file = decode_path(path_key)?;
+    // Die kanonische Pfadprüfung allein würde einen Link auf eine andere
+    // Datei innerhalb des Suchorts als gültige Datei akzeptieren.
+    if fs::symlink_metadata(&file)
+        .map_err(|error| format!("Datei ist nicht verfügbar: {error}"))?
+        .file_type()
+        .is_symlink()
+    {
+        return Err("Symbolische Verknüpfungen können nicht als Dateien verwendet werden.".into());
+    }
     let validated = canonical_child(&root, &file)?;
     if !validated.is_file() {
         return Err("Die ausgewählte Datei ist nicht mehr vorhanden.".into());
@@ -1218,10 +1230,11 @@ pub fn run() {
 mod tests {
     use super::{
         bounded_utf8_text, canonical_child, canonical_scan_directory, classify, decode_path,
-        encode_path, matches_name, normalize_query, register_search_session, scan_directory,
-        should_emit_progress, validate_export_lines, validate_file_types, validate_query,
-        write_new_export, MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES,
-        MAX_EXPORT_TOTAL_BYTES, MAX_QUERY_BYTES, MAX_QUERY_TOKENS, MAX_TEXT_BYTES,
+        decode_units, encode_path, matches_name, normalize_query, register_search_session,
+        scan_directory, should_emit_progress, validate_export_lines, validate_file_types,
+        validate_query, write_new_export, MatchMode, ScanEvent, ScanFilters, MAX_ACTIVE_SEARCHES,
+        MAX_EXPORT_TOTAL_BYTES, MAX_PATH_KEY_UNITS, MAX_QUERY_BYTES, MAX_QUERY_TOKENS,
+        MAX_TEXT_BYTES,
     };
     use std::{
         collections::{HashMap, HashSet},
@@ -1270,6 +1283,14 @@ mod tests {
         assert!(validate_query(&"x".repeat(MAX_QUERY_BYTES + 1)).is_err());
         assert!(validate_query(&vec!["x"; MAX_QUERY_TOKENS + 1].join(" ")).is_err());
         assert_eq!(validate_query("Urlaub 2025").expect("valid query").len(), 2);
+    }
+
+    #[test]
+    fn path_key_decoder_rejects_oversized_encoded_input() {
+        // Ohne Vorabgrenze würde für jeden Hex-Block ein u32 angelegt.
+        assert!(decode_units(&"00".repeat(MAX_PATH_KEY_UNITS + 1), 2).is_err());
+        assert!(decode_units(&"0000".repeat(MAX_PATH_KEY_UNITS + 1), 4).is_err());
+        assert_eq!(decode_units("2f", 2).expect("valid byte"), vec![0x2f]);
     }
 
     #[test]
@@ -1598,6 +1619,40 @@ mod tests {
         let _ = fs::remove_dir_all(outside_dir);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn validated_allowed_file_rejects_symlink_inside_approved_root() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_test_dir("approved-file-symlink");
+        let original = root.join("original.txt");
+        fs::write(&original, b"Original bleibt erhalten").expect("create original");
+        let link = root.join("selected.txt");
+        symlink(&original, &link).expect("create internal symlink");
+
+        let allowed = super::AllowedRoots::default();
+        allowed
+            .0
+            .lock()
+            .expect("root registry")
+            .insert(root.canonicalize().expect("root"));
+        let root_key = encode_path(&root);
+        assert_eq!(
+            super::validated_allowed_file(&allowed, &root_key, &encode_path(&original))
+                .expect("regular file is permitted"),
+            original
+        );
+        assert!(
+            super::validated_allowed_file(&allowed, &root_key, &encode_path(&link)).is_err(),
+            "an internal symlink must not silently select its target"
+        );
+        assert_eq!(
+            fs::read(&original).expect("original unchanged"),
+            b"Original bleibt erhalten"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn export_rejects_oversized_total_payload_before_allocation() {
         let line = "x".repeat(32_000);
@@ -1611,7 +1666,6 @@ mod tests {
         let lines = vec!["a\tb\t1".to_string(), "c\td\t2".to_string()];
         assert_eq!(validate_export_lines(&lines).expect("valid export"), 12);
     }
-
     #[test]
     fn export_creates_new_file_but_never_overwrites_existing_content() {
         let dir = temp_test_dir("export-no-overwrite");
