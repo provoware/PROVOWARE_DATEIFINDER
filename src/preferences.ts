@@ -13,7 +13,8 @@ export const MAX_SEARCH_QUERY_TOKENS = 64;
 export const MIN_ZOOM = 0.8;
 export const MAX_ZOOM = 1.5;
 const FILE_KINDS: SavedFileKind[] = ["image", "document", "audio", "text"];
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
+// Unsichtbare Zeilen- und Schreibrichtungszeichen dürfen Vorlagen nicht optisch verfälschen.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u206f]/;
 
 // Gleiche Prüfung beim Speichern und beim erneuten Laden von Suchvorlagen.
 export function isValidPresetContent(name: string, query: string): boolean {
