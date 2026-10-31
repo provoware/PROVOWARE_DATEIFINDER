@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parsePresets, normalizeZoom, MAX_PRESETS } from "../src/preferences.ts";
+import { parsePresets, normalizeZoom, MAX_PRESETS, isSearchQueryWithinTokenLimit } from "../src/preferences.ts";
 import { isSearchQueryWithinByteLimit } from "../src/search-query.ts";
 
 test("templates accept only meaningful bounded search settings", () => {
@@ -66,4 +66,16 @@ test("imported presets reject UTF-8 queries that exceed the Rust search limit", 
   for (const item of accepted) assert.equal(isSearchQueryWithinByteLimit(item.query), true);
   for (const item of rejected) assert.equal(isSearchQueryWithinByteLimit(item.query), false);
   assert.deepEqual(parsePresets([...accepted, ...rejected]).map((item) => item.name), accepted.map((item) => item.name));
+});
+
+test("saved searches reject more than Rust's 64 Unicode whitespace-separated words", () => {
+  const preset = (query) => ({ name: "Grenze", query, matchMode: "all", fileTypes: [] });
+  const words = (count, separator = " ") => Array(count).fill("wort").join(separator);
+  assert.equal(isSearchQueryWithinTokenLimit(words(64)), true);
+  assert.equal(isSearchQueryWithinTokenLimit(words(65)), false);
+  assert.equal(isSearchQueryWithinTokenLimit(words(65, "\u2003")), false);
+  assert.equal(isSearchQueryWithinTokenLimit(words(64, "\u00a0")), true);
+  assert.equal(parsePresets([preset(words(64))]).length, 1);
+  assert.equal(parsePresets([preset(words(65))]).length, 0);
+  assert.equal(parsePresets([preset(words(65, "\u2003"))]).length, 0);
 });
