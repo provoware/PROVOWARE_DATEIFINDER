@@ -12,7 +12,7 @@ export const MAX_PRESETS = 20;
 export const MIN_ZOOM = 0.8;
 export const MAX_ZOOM = 1.5;
 const FILE_KINDS: SavedFileKind[] = ["image", "document", "audio", "text"];
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 
 export function parsePresets(value: unknown): SearchPreset[] {
   if (!Array.isArray(value)) return [];
