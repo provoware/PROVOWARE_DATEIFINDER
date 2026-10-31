@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parsePresets, normalizeZoom, MAX_PRESETS } from "../src/preferences.ts";
+import { isSearchQueryWithinByteLimit } from "../src/search-query.ts";
 
 test("templates accept only meaningful bounded search settings", () => {
   assert.deepEqual(parsePresets(null), []);
@@ -49,4 +50,20 @@ test("import rejects C1 controls in preset names and queries", () => {
     preset("Bad query", "invoice\u009bsecret"),
     preset("Good", "invoice"),
   ]), [preset("Good", "invoice")]);
+});
+
+test("imported presets reject UTF-8 queries that exceed the Rust search limit", () => {
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  const accepted = [
+    preset("ASCII", "a".repeat(4096)),
+    preset("Umlauts", "ä".repeat(2048)),
+    preset("Emoji", "🦊".repeat(1024)),
+  ];
+  const rejected = [
+    preset("Too many umlauts", "ä".repeat(2049)),
+    preset("Too many emoji", "🦊".repeat(1025)),
+  ];
+  for (const item of accepted) assert.equal(isSearchQueryWithinByteLimit(item.query), true);
+  for (const item of rejected) assert.equal(isSearchQueryWithinByteLimit(item.query), false);
+  assert.deepEqual(parsePresets([...accepted, ...rejected]).map((item) => item.name), accepted.map((item) => item.name));
 });

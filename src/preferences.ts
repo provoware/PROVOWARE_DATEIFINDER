@@ -23,7 +23,7 @@ export function parsePresets(value: unknown): SearchPreset[] {
     const item = candidate as Record<string, unknown>;
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const query = typeof item.query === "string" ? item.query.trim() : "";
-    if (!name || name.length > 48 || !query || query.length > 4096) continue;
+    if (!name || name.length > 48 || !query || query.length > 4096 || new TextEncoder().encode(query).length > 4096) continue;
     if (CONTROL_CHARS.test(name) || CONTROL_CHARS.test(query)) continue;
     const key = name.toLocaleLowerCase("de-DE");
     if (seen.has(key)) continue;
