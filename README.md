@@ -154,6 +154,9 @@ Die UI kennt nur **Fähigkeiten und Ports**, nicht Windows/Android/iOS-Sonderfä
 
 ## ☑ Trefferauswahl und 💾 Schnellspeicher
 
+> [!TIP]
+> **Projektübergreifender Standard:** [PROVOWARE-Schnellspeicher – Bedienung, Datenschutz, sichere Ablage und Prüffälle](docs/PROVOWARE_SCHNELLSPEICHER_STANDARD.md). Bestehende Notizordner anderer Projekte werden nicht ungeprüft geändert.
+
 - **Alle auswählen / Alle abwählen:** Direkt über der Trefferliste schaltet der Knopf zwischen allen aktuell gefundenen Treffern und keiner Auswahl um. Das gilt auch für Treffer, die erst beim Scrollen sichtbar werden (bis zur angezeigten Treffergrenze von 20.000). Während einer laufenden Suche kommen möglicherweise neue, noch nicht ausgewählte Treffer hinzu. Für Kopieren, Verschieben und ZIP gelten unverändert die Sicherheitsgrenzen von maximal **100 Dateien / 8 GiB** je Vorgang.
 - **Schnellspeicher:** Im oberen Dashboard die Notiz einzeilig eingeben und mit **Enter** oder **💾 Speichern** bestätigen. Jede Notiz wird mit Zeitstempel **am Ende** der festen Datei `SCHNELLSPEICHER.txt` angehängt. Vorhandene Einträge werden nicht überschrieben. Leere Eingaben, Zeilenumbrüche und zu lange Eingaben werden abgewiesen. Bei Speicherfehlern bleibt der Text im Feld.
 - **Ablage:** Beim Entwicklungsstart (`./start.sh` / `npm run tauri dev`) liegt die Datei direkt im **Projekt-Hauptverzeichnis** neben `README.md`. In einer installierten Programmversion ist dieser Quellordner nicht zuverlässig vorhanden oder beschreibbar; dort wird die Datei unter dem **lokalen Anwendungsdatenverzeichnis** des Systems angelegt. Der nach dem Speichern angezeigte vollständige Pfad zeigt den tatsächlichen Ort. Die Datei ist in `.gitignore` eingetragen, damit private Notizen nicht versehentlich auf GitHub landen.
