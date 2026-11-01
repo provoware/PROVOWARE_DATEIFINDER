@@ -1,3 +1,10 @@
+## 2026-11-01 · Trefferauswahl und Schnellspeicher
+
+- Ein Knopf wählt alle angezeigten Treffer (auch virtualisierte) aus oder hebt die gesamte Auswahl auf.
+- Einzeiliger Schnellspeicher im Dashboard; Anhängen mit Zeitstempel an `SCHNELLSPEICHER.txt`.
+- Entwicklungsmodus speichert im Projekt-Hauptverzeichnis, installierte Fassungen im lokalen Anwendungsdatenverzeichnis.
+- Getrennte Auswahltests (20.000 Treffer) und Rust-Tests für Anhängen, Zeilenprüfungen und Linkschutz.
+
 # Changelog
 
 ## Unveröffentlicht – Vorbereitung auf 0.2
