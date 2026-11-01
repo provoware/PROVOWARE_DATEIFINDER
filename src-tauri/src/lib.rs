@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 mod file_actions;
 mod quick_notes;
-use quick_notes::{append_quick_note, QuickNoteLock};
 use file_actions::{
     perform_file_action, valid_name, valid_session_id, ActionKind, ActionOptions, MAX_ACTION_FILES,
 };
+use quick_notes::{append_quick_note, QuickNoteLock};
 use std::{
     collections::{hash_map::DefaultHasher, HashMap, HashSet, VecDeque},
     ffi::OsString,
