@@ -34,15 +34,41 @@ fn note_target(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn valid_timestamp(value: &str) -> bool {
-    value.len() == 24
-        && value.bytes().enumerate().all(|(index, byte)| match index {
-            4 | 7 => byte == b'-',
-            10 => byte == b'T',
-            13 | 16 => byte == b':',
-            19 => byte == b'.',
-            23 => byte == b'Z',
+    let bytes = value.as_bytes();
+    if bytes.len() != 24
+        || !bytes.iter().enumerate().all(|(index, byte)| match index {
+            4 | 7 => *byte == b'-',
+            10 => *byte == b'T',
+            13 | 16 => *byte == b':',
+            19 => *byte == b'.',
+            23 => *byte == b'Z',
             _ => byte.is_ascii_digit(),
         })
+    {
+        return false;
+    }
+
+    // Ein ISO-Zeitstempel muss auch ein reales Kalenderdatum enthalten.
+    let digits = |start: usize, end: usize| {
+        bytes[start..end]
+            .iter()
+            .fold(0u32, |number, byte| number * 10 + u32::from(*byte - b'0'))
+    };
+    let year = digits(0, 4);
+    let month = digits(5, 7);
+    let day = digits(8, 10);
+    let leap_year = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap_year => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
+        && digits(11, 13) < 24
+        && digits(14, 16) < 60
+        && digits(17, 19) < 60
 }
 
 fn append_validated_line(path: &Path, note: &str, created_at: &str) -> Result<(), String> {
@@ -121,6 +147,40 @@ mod tests {
         assert!(append_validated_line(&path, "  ", "2026-11-01T00:00:02.000Z").is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
         fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn invalid_calendar_timestamps_are_rejected_before_creating_a_note() {
+        use super::valid_timestamp;
+
+        for invalid in [
+            "2026-00-01T12:00:00.000Z",
+            "2026-13-01T12:00:00.000Z",
+            "2026-02-29T12:00:00.000Z",
+            "2024-04-31T12:00:00.000Z",
+            "1900-02-29T12:00:00.000Z",
+            "2026-11-00T12:00:00.000Z",
+            "2026-11-01T24:00:00.000Z",
+            "2026-11-01T23:60:00.000Z",
+            "2026-11-01T23:59:60.000Z",
+        ] {
+            assert!(!valid_timestamp(invalid), "{invalid}");
+        }
+        for valid in [
+            "2024-02-29T23:59:59.999Z",
+            "2000-02-29T00:00:00.000Z",
+            "2026-11-01T00:00:00.000Z",
+        ] {
+            assert!(valid_timestamp(valid), "{valid}");
+        }
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("dateifinder-invalid-date-{nonce}.txt"));
+        assert!(append_validated_line(&path, "Notiz", "2026-99-99T99:99:99.999Z").is_err());
+        assert!(!path.exists(), "ungueltiger Zeitstempel darf keine Datei anlegen");
     }
 
     #[cfg(unix)]
