@@ -134,6 +134,9 @@ pub(crate) fn valid_name(name: &str) -> bool {
         && !name.ends_with('.')
         && !name.chars().any(|character| {
             character.is_control()
+                || matches!(character, '\u{061c}' | '\u{200e}' | '\u{200f}')
+                || ('\u{2028}'..='\u{202e}').contains(&character)
+                || ('\u{2066}'..='\u{206f}').contains(&character)
                 || matches!(
                     character,
                     '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
@@ -788,6 +791,19 @@ mod tests {
         assert!(source.exists());
         assert!(!dest.join(".dateifinder-test-zip-zip-staging").exists());
         fs::remove_dir_all(root).expect("cleanup test");
+    }
+
+    #[test]
+    fn file_action_names_reject_invisible_layout_controls() {
+        let controls = concat!(
+            "\u{061c}\u{200e}\u{200f}",
+            "\u{2028}\u{2029}\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}",
+            "\u{2066}\u{2067}\u{2068}\u{2069}\u{206a}\u{206b}\u{206c}\u{206d}\u{206e}\u{206f}",
+        );
+        for character in controls.chars() {
+            assert!(!valid_name(&format!("archiv{character}2026.zip")));
+        }
+        assert!(valid_name("Büro 🧑‍💻.zip"));
     }
 
     #[test]

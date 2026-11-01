@@ -223,3 +223,16 @@ test("file-action names reject Unicode controls without weakening existing rules
   assert.match(fileActions, /name\.len\(\) <= 100/u);
   assert.match(fileActions, /character\.is_control\(\)/u);
 });
+
+test("file-action names reject invisible bidi and layout controls", () => {
+  const controls = [
+    "\u061c", "\u200e", "\u200f", "\u2028", "\u2029",
+    "\u202a", "\u202b", "\u202c", "\u202d", "\u202e",
+    "\u2066", "\u2067", "\u2068", "\u2069", "\u206a",
+    "\u206b", "\u206c", "\u206d", "\u206e", "\u206f",
+  ];
+  for (const character of controls) {
+    assert.equal(validActionName(`archiv${character}2026.zip`), false, `U+${character.codePointAt(0)?.toString(16)}`);
+  }
+  assert.equal(validActionName("Büro 🧑‍💻.zip"), true);
+});
