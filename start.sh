@@ -385,19 +385,21 @@ if [[ ! -d node_modules ]] || ! npm ls --depth=0 --silent >>"$LOG_FILE" 2>&1; th
   if (( CHECK_ONLY || ! AUTO_REPAIR )); then
     fail "JavaScript-Bausteine fehlen oder sind unvollständig. Im normalen Modus kann ich sie einrichten."
   fi
-  if [[ ! -d node_modules && -f package-lock.json ]]; then
+  # Auch bei einer Reparatur nur die freigegebenen Paketversionen nutzen.
+  # npm install könnte package-lock.json unbemerkt ändern.
+  [[ -f package-lock.json ]] || fail "package-lock.json fehlt. Ohne feste Paketliste keine sichere Installation oder Reparatur."
+  if [[ ! -d node_modules ]]; then
     say "  ! Erstinstallation anhand der festen Paketliste erforderlich."
-    if ! consent "JavaScript-Bausteine anhand der festen Paketliste installieren (npm ci)?"; then
+  else
+    say "  ! Bestehende Pakete sind unvollständig. Sie werden anhand der festen Paketliste neu eingerichtet."
+  fi
+  if ! consent "JavaScript-Bausteine anhand der festen Paketliste mit npm ci einrichten?"; then
+    if [[ ! -d node_modules ]]; then
       fail "Erstinstallation nicht freigegeben. Es wurden keine JavaScript-Pakete installiert."
     fi
-    run_step "JavaScript-Bausteine installieren (npm ci)" npm ci --ignore-scripts --no-audit --no-fund
-  else
-    say "  ! Bestehende Pakete sind unvollständig. npm repariert die Installation."
-    if ! consent "Fehlende JavaScript-Bausteine per npm install nachinstallieren?"; then
-      fail "JavaScript-Reparatur nicht freigegeben."
-    fi
-    run_step "JavaScript-Bausteine reparieren (npm install)" npm install --ignore-scripts --no-audit --no-fund
+    fail "JavaScript-Reparatur nicht freigegeben. Es wurden keine JavaScript-Pakete installiert."
   fi
+  run_step "JavaScript-Bausteine reproduzierbar einrichten (npm ci)" npm ci --ignore-scripts --no-audit --no-fund
 else
   say "  ✓ JavaScript-Bausteine vorhanden"
 fi
