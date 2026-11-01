@@ -1,5 +1,18 @@
 # PROVOWARE DateiFinder – offene Punkte
 
+# Priorisierte Aufgaben und Prüfnachweise – 01.11.2026
+
+[x] 2026-11-01 | P0 · Sicherheit | Unicode-Richtungssteuerzeichen im TXT-Export als sichtbare Zeichenfolgen ausgeben | prüfen: PR #74, CI Frontend/Rust/Golden und Hardening erfolgreich, main-Merge a237386370b3 | fertig wenn: Merge bestätigt, ursprüngliche Dateien unberührt.
+[ ] 2026-11-01 | P1 · Freigabe | Aktuellen main-Stand nach Dokumentationspflege erneut vollständig prüfen | prüfen: GitHub-Qualitätsprüfungen am endgültigen Commit und Desktop-Start | fertig wenn: alle erforderlichen Tests auf derselben Revision erfolgreich, verbleibende Grenzen dokumentiert.
+[ ] 2026-11-01 | P1 · Lizenz | Lizenzentscheidung und nachzuweisende Weitergaberechte abschließen | prüfen: tatsächlicher Lizenztext und betroffene Fremdkomponenten | fertig wenn: rechtsklarer dokumentierter Freigabestatus.
+[ ] 2026-11-01 | P2 · Bedienung | Fehlerzustände bei inzwischen gelöschten oder gesperrten Treffern nachvollziehbar testen | prüfen: isolierte Wiederholungs- und Zugriffsfehlerfälle | fertig wenn: verständliche Rückmeldung ohne Datenverlust.
+[ ] 2026-11-01 | P3 · Mobile | Dateiquellen für Android und iOS separat prüfen | prüfen: reale Plattformrechte und Gerätetests | fertig wenn: Sicherheits- und Bedienungsnachweise pro Plattform vorliegen.
+
+> Status: 0 offene PRs nach Integration von #74 zum Zeitpunkt der Bestandsaufnahme; spätere Änderungen müssen erneut gezählt werden. Keine Stable-Freigabe aus dieser Liste ableiten.
+
+---
+
+
 [P2] Preview-Thumbnail-Pipeline – Vorschau zeigt derzeit Metadaten, aber keine echten Bild-/Dateivorschauen – separat und erst nach neuem Freigabeauftrag bearbeiten.
 
 [P2] Fehlerzustände für gelöschte/gesperrte Dateien – Dateiaktionen behandeln nicht jeden nachträglichen Dateizustand gleich detailliert – eigene Fehlerfall-Abnahme ergänzen.
