@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
-import { formatDate } from "./date-format";
+import { formatDate, formatResultRowDate } from "./date-format";
 import { MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
 import { isSearchQueryWithinByteLimit } from "./search-query";
 import { validActionName } from "./file-action-names";
@@ -813,13 +813,6 @@ function focusResultAt(index: number): void {
   const target = [...ui.results.querySelectorAll<HTMLButtonElement>(".result-row")]
     .find((row) => row.dataset.fileId === targetId);
   target?.focus({ preventScroll: true });
-}
-
-function formatResultRowDate(epochMs: number | null): string {
-  if (epochMs === null || !Number.isFinite(epochMs)) return "–";
-  const date = new Date(epochMs);
-  if (Number.isNaN(date.getTime())) return "–";
-  return new Intl.DateTimeFormat("de-DE").format(date);
 }
 
 function renderVisibleResultRows(): void {
