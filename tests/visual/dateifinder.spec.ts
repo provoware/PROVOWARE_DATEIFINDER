@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
-// Absichtlich neu begutachtete 768×512-Ansicht mit Suchfiltern und Prozessstatus (PR #43).
-const APPROVED_768X512_SHA256 = "1a618247129cdc3248f02cffdead6713b23192bbe19ed27c3ab13c27e9c147fc";
+// Erneut begutachtete 768×512-Ansicht mit Schnellspeicher und Auswahlknopf (PR #75).
+// Prüfbild: quality-Run 41256358484, visual-failure-evidence, 01.11.2026.
+const APPROVED_768X512_SHA256 = "3b1d1a7df2092619e2050914e723aa66e786d3512c46e7557b640a0a54f6b135";
 
 test("768x512 Golden Reference", async ({ page }, testInfo) => {
   expect(page.viewportSize()).toEqual({ width: 768, height: 512 });

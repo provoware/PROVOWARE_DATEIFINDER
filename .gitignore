@@ -13,3 +13,6 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+
+# Lokale Einzeilennotizen: niemals persönliche Inhalte einchecken.
+SCHNELLSPEICHER.txt

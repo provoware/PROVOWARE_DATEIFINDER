@@ -27,9 +27,15 @@
 
       <main class="workspace">
         <header class="topbar" data-tauri-drag-region>
-          <div data-tauri-drag-region>
+          <div class="topbar-title" data-tauri-drag-region>
             <h1>Dateinamen durchsuchen</h1>
-            <p>Ein oder mehrere Wörter eingeben und deine Dateien finden.</p>
+            <form id="quick-note-form" class="quick-note-form" aria-label="Schnellspeicher">
+              <label class="sr-only" for="quick-note-input">Eine kurze Notiz dauerhaft speichern</label>
+              <input id="quick-note-input" type="text" maxlength="500" autocomplete="off" placeholder="Schnellnotiz eingeben …" aria-describedby="quick-note-hint" />
+              <button id="quick-note-save" type="submit" title="Notiz dauerhaft anhängen">💾 Speichern</button>
+              <span id="quick-note-hint" class="sr-only">Eingabe mit Enter speichern. Bestehende Notizen bleiben erhalten.</span>
+              <span id="quick-note-status" class="sr-only" role="status" aria-live="polite"></span>
+            </form>
           </div>
           <div class="topbar-actions">
             <button id="mobile-source-button" class="window-button mobile-only" type="button" aria-label="Suchquelle wählen" title="Suchquelle wählen">📁</button>
@@ -78,6 +84,10 @@
                   <span id="metric-filter" class="metric-filter">Alle Typen</span>
                 </div>
                 <p id="result-limit-notice" class="result-limit-notice" role="status" hidden></p>
+                <div class="selection-tools" aria-label="Trefferauswahl">
+                  <button id="toggle-select-all" class="file-action-button" type="button" aria-pressed="false" disabled>☑ Alle auswählen</button>
+                  <span id="selected-total">0 von 0 ausgewählt</span>
+                </div>
                 <div id="file-action-toolbar" class="file-action-toolbar" aria-label="Aktionen für ausgewählte Dateien" hidden>
                   <span id="file-action-count">0 ausgewählt</span>
                   <button id="action-copy" type="button" class="file-action-button">⧉ Kopieren</button>
