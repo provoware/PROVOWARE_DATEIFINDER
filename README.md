@@ -1,5 +1,49 @@
 # PROVOWARE DateiFinder
 
+<!-- PROVOWARE_DREISTUFIGER_EINSTIEG_20261101 -->
+## 🚀 Zuerst starten – 3 kurze Schritte
+
+> [!IMPORTANT]
+> **Linux Mint, Kubuntu oder Ubuntu:** Terminal im gewünschten Arbeitsordner öffnen. Jeden Befehl einzeln kopieren. Dies ist ein **Entwicklungsstand**, keine fertig abgenommene Installation.
+
+1. **Projekt holen**
+   ```bash
+   git clone https://github.com/provoware/PROVOWARE_DATEIFINDER.git
+   ```
+2. **Ordner öffnen**
+   ```bash
+   cd PROVOWARE_DATEIFINDER
+   ```
+3. **Programm starten**
+   ```bash
+   ./start.sh
+   ```
+
+## 🧭 Drei Hilfestufen
+
+| Stufe | Für wen? | Direkter Einstieg |
+|---|---|---|
+| 🟢 **1 · Kurz** | Sofort ausprobieren | [Die drei Befehle](#-zuerst-starten--3-kurze-schritte) |
+| 🔵 **2 · Ausführlich** | Voraussetzungen, Suchmöglichkeiten und Bedienung | [Schnellstart](#schnellstart) · [Dateisuche](#suche-und-fenstergröße) |
+| 🟠 **3 · Ohne Vorwissen** | Probleme erkennen und sicher lösen | [Fehlerhilfe unten](#-hilfe-ohne-vorkenntnisse) |
+
+> [!TIP]
+> **Zuerst nur prüfen:** Nach Schritt 2 kannst du `./start.sh --check` ausführen. Damit prüfst du die Umgebung, ohne das Programm zu starten oder etwas zu reparieren.
+
+## 🧩 Hilfe ohne Vorkenntnisse
+
+- **Was ist ein Terminal?** Ein Fenster für Befehle; auf Kubuntu häufig mit **Strg + Alt + T** öffnen. Kopierten Befehl mit **Enter** bestätigen.
+- **„git: command not found“:** Git fehlt. Auf Ubuntu/Kubuntu/Mint kann es über die Paketverwaltung installiert werden.
+- **„Permission denied“ beim Start:** Im Projektordner `bash ./start.sh` verwenden, wenn die Datei nicht ausführbar markiert ist.
+- **Fehlende Werkzeuge:** Zuerst `./start.sh --check` verwenden und die konkrete Fehlermeldung lesen. Der normale Start kann notwendige Installationsschritte vorschlagen.
+- **Dateisicherheit:** Suchordner bewusst auswählen. Originaldateien nicht nur zum Testen verschieben oder löschen.
+- **TXT-Export:** Nach [PR #74](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/74) werden unsichtbare Unicode-Richtungszeichen in Namen und Pfaden als sichtbare `\\uXXXX`-Folgen ausgegeben. Die gespeicherten Originaldateien bleiben unverändert.
+
+> [!WARNING]
+> **Noch offen:** Mobile-Dateiquellen, reale Plattformabnahme und Lizenzentscheidung sind nicht abgeschlossen. 🟢 = geprüft, 🟠 = offen, 🔴 = gesperrt; die Farben besitzen immer eine Textbeschreibung.
+
+---
+
 Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/CSS + Rust**, ohne Cloudpflicht.
 
 ## Status
