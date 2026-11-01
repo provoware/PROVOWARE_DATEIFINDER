@@ -180,7 +180,10 @@ mod tests {
             .as_nanos();
         let path = std::env::temp_dir().join(format!("dateifinder-invalid-date-{nonce}.txt"));
         assert!(append_validated_line(&path, "Notiz", "2026-99-99T99:99:99.999Z").is_err());
-        assert!(!path.exists(), "ungueltiger Zeitstempel darf keine Datei anlegen");
+        assert!(
+            !path.exists(),
+            "ungueltiger Zeitstempel darf keine Datei anlegen"
+        );
     }
 
     #[cfg(unix)]
