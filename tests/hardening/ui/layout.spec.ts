@@ -470,6 +470,7 @@ test("header settings open and search preferences can be adjusted", async ({ pag
   await page.goto("/");
   await page.locator("#settings-button").click();
   await expect(page.locator("#settings-dialog")).toBeVisible();
+  await expect(page.locator("#settings-zoom")).toHaveValue("1");
   await page.locator("#settings-match-select").selectOption("any");
   await expect(page.locator("#match-mode-select")).toHaveValue("any");
   await page.locator("#settings-theme-select").selectOption("green");

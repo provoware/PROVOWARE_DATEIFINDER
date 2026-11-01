@@ -89,7 +89,7 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Schnellstart
 
-Voraussetzungen: Node.js >= 20.19, Rust >= 1.77.2 und die Tauri-Systempakete für das jeweilige Betriebssystem.
+Voraussetzungen: Node.js >= 20.19, Rust >= 1.90 und die Tauri-Systempakete für das jeweilige Betriebssystem.
 
 ### Empfohlen: Linux Mint, Kubuntu und Ubuntu
 
