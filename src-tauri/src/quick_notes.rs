@@ -49,7 +49,9 @@ fn append_validated_line(path: &Path, note: &str, created_at: &str) -> Result<()
     let note = note.trim();
     if note.is_empty()
         || note.len() > MAX_NOTE_BYTES
-        || note.chars().any(|c| c.is_control() || c == '\u{2028}' || c == '\u{2029}')
+        || note
+            .chars()
+            .any(|c| c.is_control() || c == '\u{2028}' || c == '\u{2029}')
     {
         return Err("Bitte eine einzeilige Notiz mit maximal 1.024 Byte eingeben.".into());
     }
@@ -83,7 +85,10 @@ pub fn append_quick_note(
     note: String,
     created_at: String,
 ) -> Result<String, String> {
-    let _write_guard = lock.0.lock().map_err(|_| "Notizspeicher ist gesperrt.".to_string())?;
+    let _write_guard = lock
+        .0
+        .lock()
+        .map_err(|_| "Notizspeicher ist gesperrt.".to_string())?;
     let path = note_target(&app)?;
     append_validated_line(&path, &note, &created_at)?;
     Ok(path.display().to_string())
@@ -92,11 +97,17 @@ pub fn append_quick_note(
 #[cfg(test)]
 mod tests {
     use super::append_validated_line;
-    use std::{fs, time::{SystemTime, UNIX_EPOCH}};
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn quick_notes_append_without_replacing_existing_lines() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let path = std::env::temp_dir().join(format!("dateifinder-quick-{nonce}.txt"));
         append_validated_line(&path, "Erste Notiz", "2026-11-01T00:00:00.000Z").unwrap();
         append_validated_line(&path, "Zweite Notiz", "2026-11-01T00:00:01.000Z").unwrap();
@@ -104,7 +115,9 @@ mod tests {
         assert_eq!(content.lines().count(), 2);
         assert!(content.contains("Erste Notiz\n"));
         assert!(content.ends_with("Zweite Notiz\n"));
-        assert!(append_validated_line(&path, "Trick\nNeue Zeile", "2026-11-01T00:00:02.000Z").is_err());
+        assert!(
+            append_validated_line(&path, "Trick\nNeue Zeile", "2026-11-01T00:00:02.000Z").is_err()
+        );
         assert!(append_validated_line(&path, "  ", "2026-11-01T00:00:02.000Z").is_err());
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
         fs::remove_file(&path).unwrap();
@@ -114,13 +127,24 @@ mod tests {
     #[test]
     fn existing_symlink_is_not_followed() {
         use std::os::unix::fs::symlink;
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let root = std::env::temp_dir().join(format!("dateifinder-link-{nonce}"));
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("original.txt"), "unveraendert").unwrap();
         symlink(root.join("original.txt"), root.join("notes.txt")).unwrap();
-        assert!(append_validated_line(&root.join("notes.txt"), "nicht speichern", "2026-11-01T00:00:00.000Z").is_err());
-        assert_eq!(fs::read_to_string(root.join("original.txt")).unwrap(), "unveraendert");
+        assert!(append_validated_line(
+            &root.join("notes.txt"),
+            "nicht speichern",
+            "2026-11-01T00:00:00.000Z"
+        )
+        .is_err());
+        assert_eq!(
+            fs::read_to_string(root.join("original.txt")).unwrap(),
+            "unveraendert"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }
