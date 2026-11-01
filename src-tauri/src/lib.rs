@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 mod file_actions;
+mod quick_notes;
+use quick_notes::{append_quick_note, QuickNoteLock};
 use file_actions::{
     perform_file_action, valid_name, valid_session_id, ActionKind, ActionOptions, MAX_ACTION_FILES,
 };
@@ -1203,6 +1205,7 @@ pub fn run() {
         .manage(SearchRegistry::default())
         .manage(AllowedRoots::default())
         .manage(FileActionRegistry::default())
+        .manage(QuickNoteLock::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -1217,6 +1220,7 @@ pub fn run() {
             reveal_file,
             preview_text,
             export_results,
+            append_quick_note,
             import_search_presets,
             export_search_presets,
             execute_file_action,
