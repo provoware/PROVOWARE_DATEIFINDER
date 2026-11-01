@@ -10,6 +10,7 @@ import { MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent, norma
 import { isSearchQueryWithinByteLimit } from "./search-query";
 import { validActionName } from "./file-action-names";
 import { formatExportLine } from "./export-lines";
+import { toggleAllResults } from "./result-selection";
 
 type Theme = "cyan" | "purple" | "green" | "orange";
 type SortMode = "name-asc" | "name-desc" | "size-desc" | "modified-desc";
@@ -256,6 +257,7 @@ interface BrowserTestAdapter {
   executeFileAction(request: FileActionRequest): Promise<FileActionResult | null>;
   cancelFileAction(sessionId: string): Promise<void>;
   listenFileActionProgress(listener: (payload: FileActionProgress) => void): Promise<UnlistenFn>;
+  appendQuickNote(note: string, createdAt: string): Promise<string>;
 }
 
 declare global {
@@ -339,6 +341,11 @@ async function exportResults(lines: string[]): Promise<boolean> {
   return invoke<boolean>("export_results", { lines });
 }
 
+async function appendQuickNote(note: string, createdAt: string): Promise<string> {
+  if (browserTestAdapter?.appendQuickNote) return browserTestAdapter.appendQuickNote(note, createdAt);
+  return invoke<string>("append_quick_note", { note, createdAt });
+}
+
 async function loadTheme(): Promise<Theme | null> {
   const value = await settings.get<string>("theme");
   return value === "cyan" || value === "purple" || value === "green" || value === "orange"
@@ -410,6 +417,12 @@ function byId<T extends HTMLElement>(id: string): T {
 
 const ui = {
   form: byId<HTMLFormElement>("search-form"),
+  quickNoteForm: byId<HTMLFormElement>("quick-note-form"),
+  quickNoteInput: byId<HTMLInputElement>("quick-note-input"),
+  quickNoteSave: byId<HTMLButtonElement>("quick-note-save"),
+  quickNoteStatus: byId<HTMLElement>("quick-note-status"),
+  toggleSelectAll: byId<HTMLButtonElement>("toggle-select-all"),
+  selectedTotal: byId<HTMLElement>("selected-total"),
   query: byId<HTMLInputElement>("query-input"),
   matchMode: byId<HTMLSelectElement>("match-mode-select"),
   searchScopeNote: byId<HTMLElement>("search-scope-note"),
@@ -905,6 +918,11 @@ function renderResults(): void {
   ui.empty.hidden = state.results.length > 0 || state.searching;
   renderEmptyState();
   const selected = selectedFiles();
+  const allSelected = state.results.length > 0 && selected.length === state.results.length;
+  ui.toggleSelectAll.disabled = state.results.length === 0 || state.fileActionBusy;
+  ui.toggleSelectAll.setAttribute("aria-pressed", String(allSelected));
+  ui.toggleSelectAll.textContent = allSelected ? "☐ Alle abwählen" : "☑ Alle auswählen";
+  ui.selectedTotal.textContent = `${selected.length.toLocaleString("de-DE")} von ${state.results.length.toLocaleString("de-DE")} ausgewählt`;
   const canAct = selected.length > 0 && !state.searching && !state.fileActionBusy && Boolean(state.sourcePathKey)
     && selected.length <= 100 && state.platform.canPickFolder;
   ui.fileActionToolbar.hidden = selected.length === 0;
@@ -1340,6 +1358,41 @@ async function initialize(): Promise<void> {
   }).catch((error) => {
     console.error("File action progress unavailable", error);
     setStatus("Dateiaktionen nicht verfügbar", "Fortschrittsanzeige konnte nicht verbunden werden. Bitte neu starten.", "error");
+  });
+
+  ui.toggleSelectAll.addEventListener("click", () => {
+    if (state.fileActionBusy || state.results.length === 0) return;
+    state.selectedIds = toggleAllResults(state.results.map((file) => file.id), state.selectedIds);
+    renderResults();
+  });
+
+  ui.quickNoteForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (ui.quickNoteSave.disabled) return;
+    const note = ui.quickNoteInput.value.trim();
+    if (!note) {
+      ui.quickNoteStatus.textContent = "Bitte zuerst eine Notiz eingeben.";
+      ui.quickNoteInput.focus();
+      return;
+    }
+    if (new TextEncoder().encode(note).byteLength > 1024) {
+      ui.quickNoteStatus.textContent = "Notiz zu lang: höchstens 1.024 Byte.";
+      setStatus("Notiz zu lang", "Bitte den Text kürzen.", "warning");
+      return;
+    }
+    ui.quickNoteSave.disabled = true;
+    try {
+      const savedPath = await appendQuickNote(note, new Date().toISOString());
+      ui.quickNoteInput.value = "";
+      ui.quickNoteStatus.textContent = "Notiz dauerhaft gespeichert.";
+      setStatus("Schnellnotiz gespeichert", `Angefügt an: ${savedPath}`);
+      ui.quickNoteInput.focus();
+    } catch (error) {
+      ui.quickNoteStatus.textContent = "Speichern fehlgeschlagen. Eingabe bleibt erhalten.";
+      setStatus("Schnellspeichern fehlgeschlagen", safeMessage(error), "error");
+    } finally {
+      ui.quickNoteSave.disabled = false;
+    }
   });
 
   ui.actionCopy.addEventListener("click", () => showFileAction("copy"));
