@@ -284,7 +284,8 @@ where
 }
 
 fn decode_units(value: &str, width: usize) -> Result<Vec<u32>, String> {
-    if width == 0 || value.len() % width != 0 || value.len() / width > MAX_PATH_KEY_UNITS {
+    if width == 0 || !value.len().is_multiple_of(width) || value.len() / width > MAX_PATH_KEY_UNITS
+    {
         return Err("Ungültiger Dateischlüssel.".into());
     }
     value

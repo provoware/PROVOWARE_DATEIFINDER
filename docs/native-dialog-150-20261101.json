@@ -1,0 +1,284 @@
+{
+  "backend": "native Tauri / WebKitGTK / Xvfb",
+  "requested_window": [
+    800,
+    600
+  ],
+  "zoom": 1.5,
+  "cycles": [
+    {
+      "cycle": 1,
+      "before": {
+        "zoomValue": "1.5",
+        "cssZoom": "",
+        "innerHeight": 400,
+        "devicePixelRatio": 1.5,
+        "dialog": {
+          "scrollTop": 0,
+          "rect": {
+            "x": 46.66666793823242,
+            "width": 440,
+            "left": 46.66666793823242,
+            "right": 486.6666679382324,
+            "top": 20,
+            "height": 360,
+            "y": 20,
+            "bottom": 380
+          },
+          "scrollHeight": 908,
+          "clientHeight": 359
+        },
+        "open": true,
+        "outerWidth": 800,
+        "tauri": true,
+        "outerHeight": 600,
+        "close": {
+          "x": 356,
+          "width": 110,
+          "left": 356,
+          "right": 466,
+          "top": 871.6666870117188,
+          "height": 38,
+          "y": 871.6666870117188,
+          "bottom": 909.6666870117188
+        },
+        "closeInViewport": false,
+        "innerWidth": 533
+      },
+      "closed": true
+    },
+    {
+      "cycle": 2,
+      "before": {
+        "zoomValue": "1.5",
+        "cssZoom": "",
+        "innerHeight": 400,
+        "devicePixelRatio": 1.5,
+        "dialog": {
+          "scrollTop": 549,
+          "rect": {
+            "x": 46.66666793823242,
+            "width": 440,
+            "left": 46.66666793823242,
+            "right": 486.6666679382324,
+            "top": 20,
+            "height": 360,
+            "y": 20,
+            "bottom": 380
+          },
+          "scrollHeight": 908,
+          "clientHeight": 359
+        },
+        "open": true,
+        "outerWidth": 800,
+        "tauri": true,
+        "outerHeight": 600,
+        "close": {
+          "x": 356,
+          "width": 110,
+          "left": 356,
+          "right": 466,
+          "top": 323,
+          "height": 38,
+          "y": 323,
+          "bottom": 361
+        },
+        "closeInViewport": true,
+        "innerWidth": 533
+      },
+      "closed": true
+    },
+    {
+      "cycle": 3,
+      "before": {
+        "zoomValue": "1.5",
+        "cssZoom": "",
+        "innerHeight": 400,
+        "devicePixelRatio": 1.5,
+        "dialog": {
+          "scrollTop": 549,
+          "rect": {
+            "x": 46.66666793823242,
+            "width": 440,
+            "left": 46.66666793823242,
+            "right": 486.6666679382324,
+            "top": 20,
+            "height": 360,
+            "y": 20,
+            "bottom": 380
+          },
+          "scrollHeight": 908,
+          "clientHeight": 359
+        },
+        "open": true,
+        "outerWidth": 800,
+        "tauri": true,
+        "outerHeight": 600,
+        "close": {
+          "x": 356,
+          "width": 110,
+          "left": 356,
+          "right": 466,
+          "top": 323,
+          "height": 38,
+          "y": 323,
+          "bottom": 361
+        },
+        "closeInViewport": true,
+        "innerWidth": 533
+      },
+      "closed": true
+    }
+  ],
+  "capabilities": {
+    "browserName": "wry",
+    "browserVersion": "0.57.1",
+    "platformName": "linux",
+    "acceptInsecureCerts": false,
+    "strictFileInteractability": false,
+    "setWindowRect": true,
+    "unhandledPromptBehavior": "dismiss and notify",
+    "pageLoadStrategy": "normal",
+    "proxy": {},
+    "timeouts": {
+      "script": 30000,
+      "pageLoad": 300000,
+      "implicit": 0
+    }
+  },
+  "windowRect": {
+    "x": 0,
+    "y": 0,
+    "width": 800,
+    "height": 600
+  },
+  "beforeZoom": {
+    "zoomValue": "1",
+    "cssZoom": "",
+    "innerHeight": 600,
+    "devicePixelRatio": 1,
+    "dialog": {
+      "scrollTop": 367,
+      "rect": {
+        "x": 180,
+        "width": 440,
+        "left": 180,
+        "right": 620,
+        "top": 30,
+        "height": 540,
+        "y": 30,
+        "bottom": 570
+      },
+      "scrollHeight": 905,
+      "clientHeight": 538
+    },
+    "open": true,
+    "outerWidth": 800,
+    "tauri": true,
+    "outerHeight": 600,
+    "close": {
+      "x": 489,
+      "width": 110,
+      "left": 489,
+      "right": 599,
+      "top": 513,
+      "height": 38,
+      "y": 513,
+      "bottom": 551
+    },
+    "closeInViewport": true,
+    "innerWidth": 800
+  },
+  "afterZoom": {
+    "zoomValue": "1.5",
+    "cssZoom": "",
+    "innerHeight": 400,
+    "devicePixelRatio": 1.5,
+    "dialog": {
+      "scrollTop": 0,
+      "rect": {
+        "x": 46.66666793823242,
+        "width": 440,
+        "left": 46.66666793823242,
+        "right": 486.6666679382324,
+        "top": 20,
+        "height": 360,
+        "y": 20,
+        "bottom": 380
+      },
+      "scrollHeight": 908,
+      "clientHeight": 359
+    },
+    "open": true,
+    "outerWidth": 800,
+    "tauri": true,
+    "outerHeight": 600,
+    "close": {
+      "x": 356,
+      "width": 110,
+      "left": 356,
+      "right": 466,
+      "top": 871.6666870117188,
+      "height": 38,
+      "y": 871.6666870117188,
+      "bottom": 909.6666870117188
+    },
+    "closeInViewport": false,
+    "innerWidth": 533
+  },
+  "keyboard": {
+    "tabs": 0,
+    "metrics": {
+      "zoomValue": "1.5",
+      "cssZoom": "",
+      "innerHeight": 400,
+      "devicePixelRatio": 1.5,
+      "dialog": {
+        "scrollTop": 549,
+        "rect": {
+          "x": 46.66666793823242,
+          "width": 440,
+          "left": 46.66666793823242,
+          "right": 486.6666679382324,
+          "top": 20,
+          "height": 360,
+          "y": 20,
+          "bottom": 380
+        },
+        "scrollHeight": 908,
+        "clientHeight": 359
+      },
+      "open": true,
+      "outerWidth": 800,
+      "tauri": true,
+      "outerHeight": 600,
+      "close": {
+        "x": 356,
+        "width": 110,
+        "left": 356,
+        "right": 466,
+        "top": 323,
+        "height": 38,
+        "y": 323,
+        "bottom": 361
+      },
+      "closeInViewport": true,
+      "innerWidth": 533
+    },
+    "closed": true
+  },
+  "status": "PASS",
+  "source_files_sha256": {
+    "README.md": "79e9947426cd2ca9b4fb3ab0ee32124213908ff4d4b427bcff7d27b01c95af5f",
+    "index.html": "4153be177540cd96334c2dc670625b77a662dbc6c1b739a0d8b7063731d6e589",
+    "package.json": "95bbed57d98962856fef3ce2ae463c47645cc3f4a90df4f3b4641a6a48202150",
+    "package-lock.json": "366cf0383d1231e23a7bc8e285bf0d474927ec97bf1e57f33c002c93af79f263",
+    "src-tauri/Cargo.toml": "10c6e3b933c9b70b218b11c7f69f222f26797c22c6c218c97e6d43da7c199131",
+    "src-tauri/Cargo.lock": "b1bae33561c8b32a08c430187cacf67c01c27fcfe8079c4ca967c2fab32192d8",
+    "src-tauri/src/lib.rs": "674bca7f791bb0e87fd14d62cfb08f1f5f1900ba670c8f02a6dd85cb806b3d07",
+    "tests/hardening/ui/layout.spec.ts": "d63c364313fa9862c4f67383f182408e803596c1e392a6a3b684a70f79e69b73"
+  },
+  "source_local_commit": "2ce9214b0af59173ad8722b851bba50cc8a7b819",
+  "date": "2026-11-01",
+  "scope": "Native 800x600 / 150% dialog only; no Kubuntu Wayland release acceptance"
+}
