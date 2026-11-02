@@ -36,9 +36,9 @@ for (const name of ["playwright.config.ts", "playwright.hardening.config.ts"]) {
 
 test("browser timeout contract rejects missing, duplicate or excessive limits", () => {
   const source = readFileSync(resolve(root, "playwright.config.ts"), "utf8");
-  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,\\n", "")));
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,\n", "")));
   assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 0,")));
   assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 120_000,")));
   assert.throws(() => validateBrowserLimits(source.replace("    navigationTimeout: 30_000,", "    navigationTimeout: 120_000,")));
-  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 15_000,\\n    actionTimeout: 15_000,")));
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 15_000,\n    actionTimeout: 15_000,")));
 });
