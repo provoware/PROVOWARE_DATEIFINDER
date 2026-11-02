@@ -19,3 +19,12 @@ test("TXT export retains ordinary Unicode and escapes line breaks, tabs and back
     "صور 🧑‍💻\\\\notes\\nfile\t/tmp/Ärger\\t2026\t42",
   );
 });
+
+test("TXT export exposes zero-width and other invisible filename characters", () => {
+  for (const control of ["\u00ad", "\u034f", "\u180e", "\u200b", "\u2060", "\u2061", "\u2062", "\u2063", "\u2064", "\u2065", "\ufeff"]) {
+    const code = control.codePointAt(0).toString(16).padStart(4, "0");
+    const line = formatExportLine({ displayName: "Rechnung" + control + "2026", path: "/tmp/" + control + "Beleg", sizeBytes: 7 });
+    assert.equal(line, "Rechnung\\u" + code + "2026\t/tmp/\\u" + code + "Beleg\t7");
+    assert.equal(line.split("\t").length, 3);
+  }
+});
