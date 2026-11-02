@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd -- "$(dirname -- "$0")"
+if ! node --experimental-strip-types --version >/dev/null 2>&1; then
+  printf 'FEHLER: ./verify.sh benötigt Node.js mit TypeScript-Unterstützung (ab 22.6). Bitte Node.js aktualisieren.\n' >&2
+  exit 2
+fi
 echo "[1/6] Sicherheits- und Quellcode-Vertragsprüfungen"
 node --test tests/hardening/source-contracts.mjs
 echo "[2/6] Alle vorhandenen Node-Regressionsprüfungen"
