@@ -38,3 +38,5 @@
 [x] CI-Laufzeit – npm- und Rust/Cargo-Zwischenspeicher für Quality und Hardening ergänzt.
 
 [x] Abhängigkeitsüberwachung – Dependabot prüft wöchentlich npm, Cargo und GitHub-Actions.
+
+[ ] 2026-11-02 | P1 · NI-20261102-02 | Laufzeit-Wächter für Browser-, Rust- und Dateiaktionen prüfen und fehlende Zeitlimits ergänzen | prüfen: Stillstand/Timeouterkennung und Quellschutz | fertig wenn: technische Negativtests bestanden; die Regel allein genügt nicht.

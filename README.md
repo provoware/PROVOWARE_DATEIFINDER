@@ -254,3 +254,7 @@ Noch nicht festgelegt. Vor einer öffentlichen Release-Version bewusst entscheid
 ## Verifizierter Kandidat 2026-09-20
 
 Die UI-/Accessibility-Änderungen aus PR #13 wurden in einem isolierten Vollvalidierungslauf geprüft. Der finale PR-Head wird nach diesem Commit erneut durch die normalen Quality- und Hardening-Gates geprüft. Versionsfelder in npm, Cargo und Tauri sind auf 0.1.1 synchronisiert.
+
+## Zeitlimits und sichere Wiederaufnahme
+
+Der [PROVOWARE-Zeitlimitstandard](docs/PROVOWARE_TIMEOUT_STANDARD.md) legt eine abgestufte Überwachung fest. Die bereits vorhandenen CI-Obergrenzen bleiben unverändert. Keine unkontrollierten Wiederholungen oder Dateneingriffe bei Stillstand. Eine beschriebene Regel ist noch kein Nachweis einer vollständig eingebauten technischen Überwachung.

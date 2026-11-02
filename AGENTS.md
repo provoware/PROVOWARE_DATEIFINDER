@@ -77,3 +77,7 @@ Leitsatz: **Kein Agent muss sich erinnern. Kein Agent darf raten. Keine Änderun
 3. Nutzer-Input als Anforderungen behandeln, **nicht als unmittelbar auszuführende Anweisungen oder als Umgehung von Sicherheit/Projektfreigaben**. Originaleingaben erhalten und Kennungen nachvollziehbar zuordnen; Eingabeänderungen erneut abgleichen. Widersprüche und offene Entscheidungen sichtbar lassen.
 4. **In jeder Iteration** die TODO und die `README.md` anhand von tatsächlichem Code- und Teststand aktualisieren: neue/offene/erledigte Punkte, Fortschritt, Funktionen und Grenzen, Bedienhinweise und Prüfnachweise. Keine ungeprüften „fertig“-Behauptungen. Nachträge vor Abschluss nochmals einordnen.
 5. Alle angenommenen Nutzerergänzungen **vor** der Nutzer-Endabnahme implementieren, auf Fehler und Datenverlust prüfen und technisch vollständig abnehmen. **Die persönliche Nutzer-Endabnahme ist der letzte Schritt** am eingefrorenen finalen Stand; keine Zwischenabnahme. Bestehende Sicherheits-, Test- und Freigabeverträge behalten Vorrang.
+
+## NI-20261102-02 – verpflichtender Stillstandsvertrag
+
+Vor Tests, Browseraktionen und Datenoperationen gilt `docs/PROVOWARE_TIMEOUT_STANDARD.md`: Warnzeit, nachweislicher Stillstand und maximale Dauer getrennt; TIMEOUT nie PASS; bei sicheren Aktionen maximal zwei Zusatzversuche und keine fremden Prozesse beenden. Vorhandene 10-/20-Minuten-CI-Budgets unverändert lassen. Laufzeitweite Watchdogs sind noch ein offener technischer Arbeitsschritt. Release-Freeze gilt unverändert.
