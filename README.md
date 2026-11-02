@@ -89,6 +89,8 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Schnellstart
 
+**Entwickler-Prüfung:** `./verify.sh` prüft die Quellverträge, alle vorhandenen Node-Regressionsprüfungen (`tests/*.mjs`), den Frontend-Build sowie Rust-Formatierung, Clippy und Rust-Tests. Bei einem Fehler endet der Lauf ohne grüne Abschlussmeldung. Browser-/Referenzbildprüfungen und die reale Kubuntu-Endabnahme bleiben separate Schritte.
+
 Voraussetzungen: Node.js >= 20.19, Rust >= 1.90 und die Tauri-Systempakete für das jeweilige Betriebssystem.
 
 ### Empfohlen: Linux Mint, Kubuntu und Ubuntu

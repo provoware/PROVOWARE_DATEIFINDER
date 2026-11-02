@@ -178,6 +178,14 @@ test("hardening executes the complete UI suite and dependency caches stay enable
   assert.match(hardeningWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
 });
 
+test("local verify script executes all Node regressions and fails closed", async () => {
+  const script = await readFile("verify.sh", "utf8");
+  assert.match(script, /^set -Eeuo pipefail$/mu);
+  assert.match(script, /^node --test tests\/hardening\/source-contracts\.mjs$/mu);
+  assert.match(script, /^node --experimental-strip-types --test tests\/\*\.mjs$/mu);
+  assert.match(script, /^cargo test --locked --manifest-path src-tauri\/Cargo\.toml$/mu);
+});
+
 test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
   assert.match(dependabot, /package-ecosystem:\s*npm/u);
   assert.match(dependabot, /package-ecosystem:\s*cargo/u);
