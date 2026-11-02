@@ -23,9 +23,9 @@ function fixture(failStage = "") {
     writeFileSync(path, '#!/usr/bin/env bash\nprintf \'' + name + ' %s\\n\' "$*" >> "$MOCK_CALLS"\n' + failure + '\n', { mode: 0o755 });
     chmodSync(path, 0o755);
   };
-  mock("node", '[[ "$MOCK_FAIL_STAGE" == "node-regressions" && "$1" == "--experimental-strip-types" ]] && exit 41\nexit 0');
+  mock("node", '[[ "$MOCK_FAIL_STAGE" == "node-contracts" && "$1" == "--test" ]] && exit 40\n[[ "$MOCK_FAIL_STAGE" == "node-regressions" && "$1" == "--experimental-strip-types" ]] && exit 41\nexit 0');
   mock("npm", '[[ "$MOCK_FAIL_STAGE" == "npm-check" ]] && exit 42\nexit 0');
-  mock("cargo", '[[ "$MOCK_FAIL_STAGE" == "cargo-test" && "$1" == "test" ]] && exit 43\nexit 0');
+  mock("cargo", '[[ "$MOCK_FAIL_STAGE" == "cargo-fmt" && "$1" == "fmt" ]] && exit 44\n[[ "$MOCK_FAIL_STAGE" == "cargo-clippy" && "$1" == "clippy" ]] && exit 45\n[[ "$MOCK_FAIL_STAGE" == "cargo-test" && "$1" == "test" ]] && exit 43\nexit 0');
   return {
     run() {
       const result = spawnSync("/bin/bash", [join(root, "verify.sh")], {
@@ -59,13 +59,20 @@ test("local verification runs every Node regression before frontend and Rust che
   } finally { f.cleanup(); }
 });
 
-for (const [stage, expectedCalls] of [["node-regressions", 2], ["npm-check", 3], ["cargo-test", 6]]) {
+for (const [stage, expectedCalls, expectedStatus] of [
+  ["node-contracts", 1, 40],
+  ["node-regressions", 2, 41],
+  ["npm-check", 3, 42],
+  ["cargo-fmt", 4, 44],
+  ["cargo-clippy", 5, 45],
+  ["cargo-test", 6, 43],
+]) {
   test("local verification stops on " + stage + " without a false green result", () => {
     const f = fixture(stage);
     try {
       const result = f.run();
       assert.equal(result.error, undefined);
-      assert.notEqual(result.status, 0);
+      assert.equal(result.status, expectedStatus);
       assert.equal(result.calls.length, expectedCalls);
       assert.doesNotMatch(result.stdout, /Fertig – Kernprüfungen GRÜN/);
     } finally { f.cleanup(); }
