@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validActionName } from "../../src/file-action-names.ts";
+import "./verify-behavior.mjs";
 
 const [frontend, rust, fileActions, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
   readFile("src/main.ts", "utf8"),
