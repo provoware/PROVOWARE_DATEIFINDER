@@ -9,6 +9,8 @@ export default defineConfig({
   timeout: 30_000,
   expect: { timeout: 5_000 },
   use: {
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     baseURL: "http://127.0.0.1:1420",
     locale: "de-DE",
     timezoneId: "Europe/Berlin",

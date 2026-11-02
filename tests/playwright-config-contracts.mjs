@@ -15,3 +15,48 @@ for (const name of ["playwright.config.ts", "playwright.hardening.config.ts"]) {
     assert.equal(flags[0][1], "true", "forbidOnly must be true");
   });
 }
+
+function requireTimeout(source, key, indentation) {
+  const matches = [...source.matchAll(new RegExp(`^${" ".repeat(indentation)}${key}:\\s*([0-9_]+),\\s*$`, "gm"))];
+  assert.equal(matches.length, 1, `${key} must appear exactly once`);
+  return Number(matches[0][1].replaceAll("_", ""));
+}
+
+function validateBrowserLimits(source) {
+  // Only values inside the root "use" block configure Playwright actions.
+  // A similarly indented value under "webServer" must not satisfy this contract.
+  const blocks = [...source.matchAll(/^  use: \{\r?\n([\s\S]*?)^  \},\s*$/gm)];
+  assert.equal(blocks.length, 1, "exactly one root-level use block is required");
+  const use = blocks[0][1];
+  assert.equal(requireTimeout(source, "timeout", 2), 30_000);
+  assert.equal(requireTimeout(use, "actionTimeout", 4), 15_000);
+  assert.equal(requireTimeout(use, "navigationTimeout", 4), 30_000);
+}
+
+for (const name of ["playwright.config.ts", "playwright.hardening.config.ts"]) {
+  test(`${name} bounds browser actions and navigation`, () => {
+    validateBrowserLimits(readFileSync(resolve(root, name), "utf8"));
+  });
+}
+
+test("browser timeout contract rejects missing, duplicate or excessive limits", () => {
+  const source = readFileSync(resolve(root, "playwright.config.ts"), "utf8");
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,\n", "")));
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 0,")));
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 120_000,")));
+  assert.throws(() => validateBrowserLimits(source.replace("    navigationTimeout: 30_000,", "    navigationTimeout: 120_000,")));
+  assert.throws(() => validateBrowserLimits(source.replace("    actionTimeout: 15_000,", "    actionTimeout: 15_000,\n    actionTimeout: 15_000,")));
+});
+
+test("browser timeout contract rejects values moved outside the root use block", () => {
+  for (const name of ["playwright.config.ts", "playwright.hardening.config.ts"]) {
+    const source = readFileSync(resolve(root, name), "utf8");
+    for (const [key, value] of [["actionTimeout", "15_000"], ["navigationTimeout", "30_000"]]) {
+      const line = `    ${key}: ${value},\n`;
+      assert.ok(source.includes(line), `${name}: missing test fixture for ${key}`);
+      const misplaced = source.replace(line, "").replace("  webServer: {\n", `  webServer: {\n${line}`);
+      assert.notEqual(misplaced, source);
+      assert.throws(() => validateBrowserLimits(misplaced), `${name}: ${key} outside use must fail`);
+    }
+  }
+});
