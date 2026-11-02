@@ -48,6 +48,8 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Status
 
+**Prüfrobustheit (02.11.2026, Entwurf):** Der Zeitzonen-Regressionstest für die Trefferstatistik begrenzt seine eigenen Node-Unterprozesse auf 30 Sekunden. Ein zusätzlicher Negativtest prüft, dass ein blockierter Unterprozess mit `ETIMEDOUT` endet und nicht als erfolgreicher Test zählt. Die reale Kubuntu-Endabnahme bleibt offen.
+
 **v0.1.1 – Foundation Frozen / Desktop Search MVP**
 
 - ✅ Foundation-Baseline auf `e01ff57` eingefroren
