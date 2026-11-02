@@ -178,6 +178,10 @@ test("hardening executes the complete UI suite and dependency caches stay enable
   assert.match(hardeningWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
 });
 
+test("hardening runs selection regressions for virtualized result lists", () => {
+  assert.match(hardeningWorkflow, /node --experimental-strip-types --test tests\/result-selection\.test\.mjs/u);
+});
+
 test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
   assert.match(dependabot, /package-ecosystem:\s*npm/u);
   assert.match(dependabot, /package-ecosystem:\s*cargo/u);
