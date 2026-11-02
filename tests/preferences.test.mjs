@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parsePresets, normalizeZoom, MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent } from "../src/preferences.ts";
+import { parsePresets, normalizeZoom, MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent, presetNameKey } from "../src/preferences.ts";
 import { isSearchQueryWithinByteLimit } from "../src/search-query.ts";
 
 test("templates accept only meaningful bounded search settings", () => {
@@ -117,4 +117,21 @@ test("ordinary Unicode and emoji joiners remain valid in presets", () => {
     assert.equal(isValidPresetContent(name, query), true);
     assert.deepEqual(parsePresets([preset(name, query)]), [preset(name, query)]);
   }
+});
+
+
+test("canonically equivalent preset names cannot bypass duplicate checks", () => {
+  const composed = "Caf\u00e9";
+  const decomposed = "Cafe\u0301";
+  assert.notEqual(composed, decomposed);
+  assert.equal(presetNameKey(composed), presetNameKey(decomposed));
+  assert.equal(presetNameKey("B\u00dcRO"), presetNameKey("b\u00fcro"));
+  const preset = (name, query) => ({ name, query, matchMode: "all", fileTypes: [] });
+  assert.deepEqual(parsePresets([
+    preset(composed, "first"),
+    preset(decomposed, "duplicate"),
+    preset("B\u00dcRO", "third"),
+    preset("b\u00fcro", "duplicate"),
+  ]), [preset(composed, "first"), preset("B\u00dcRO", "third")]);
+  assert.notEqual(presetNameKey("Cafe"), presetNameKey(composed));
 });
