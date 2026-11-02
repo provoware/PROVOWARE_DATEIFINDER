@@ -40,3 +40,5 @@
 [x] Abhängigkeitsüberwachung – Dependabot prüft wöchentlich npm, Cargo und GitHub-Actions.
 
 [ ] 2026-11-02 | P1 · NI-20261102-02 | Laufzeit-Wächter für Browser-, Rust- und Dateiaktionen prüfen und fehlende Zeitlimits ergänzen | prüfen: Stillstand/Timeouterkennung und Quellschutz | fertig wenn: technische Negativtests bestanden; die Regel allein genügt nicht.
+
+[ ] 2026-11-02 | P1 · NI-20261102-02 · Browser-Testschutz | Playwright-Aktionen auf 15 s und Navigationen auf 30 s begrenzen; drei Konfigurations-Vertragsprüfungen einschließlich Negativfällen ergänzen | prüfen: Quality #41377295673 und Hardening #41377295611 auf 09488cb1 erfolgreich; nach Dokumentationsabgleich den finalen PR-HEAD und anschließend main erneut prüfen | fertig wenn: finaler PR-HEAD und main erfolgreich geprüft, PR #88 integriert; andere Laufzeit-Wächter und reale Kubuntu-Endabnahme bleiben separat offen.
