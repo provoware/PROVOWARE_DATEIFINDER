@@ -40,3 +40,5 @@
 [x] Abhängigkeitsüberwachung – Dependabot prüft wöchentlich npm, Cargo und GitHub-Actions.
 
 [ ] 2026-11-02 | P1 · NI-20261102-02 | Laufzeit-Wächter für Browser-, Rust- und Dateiaktionen prüfen und fehlende Zeitlimits ergänzen | prüfen: Stillstand/Timeouterkennung und Quellschutz | fertig wenn: technische Negativtests bestanden; die Regel allein genügt nicht.
+
+[ ] 2026-11-02 | P1 · NI-20261102-02 · Browser-Testschutz | Playwright-Aktionen auf 15 s und Navigationen auf 30 s begrenzen; drei Konfigurations-Vertragsprüfungen einschließlich Negativfällen ergänzen | prüfen: node --test tests/playwright-config-contracts.mjs sowie beide GitHub-CI-Abläufe am PR-HEAD | fertig wenn: beide CI-Abläufe erfolgreich, PR geprüft; andere Laufzeit-Wächter bleiben separat offen.

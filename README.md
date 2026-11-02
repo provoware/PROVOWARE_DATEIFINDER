@@ -48,6 +48,8 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Status
 
+**Browser-Testschutz (02.11.2026, PR-Entwurf):** Playwright begrenzt einzelne Browseraktionen auf 15 Sekunden und Navigationen auf 30 Sekunden. Die bisherige 30-Sekunden-Testgrenze, 30-Sekunden-Serverstartgrenze und die bestehenden CI-Jobgrenzen bleiben unverändert. Drei zusätzliche Vertragsprüfungen einschließlich Negativfällen sichern die Konfiguration ab. Das betrifft ausschließlich die Testumgebung, nicht die Laufzeit der Dateisuche. Eine erfolgreiche CI-Prüfung ersetzt keine reale Kubuntu-Endabnahme.
+
 **v0.1.1 – Foundation Frozen / Desktop Search MVP**
 
 - ✅ Foundation-Baseline auf `e01ff57` eingefroren
