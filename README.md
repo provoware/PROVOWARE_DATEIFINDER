@@ -258,3 +258,9 @@ Die UI-/Accessibility-Änderungen aus PR #13 wurden in einem isolierten Vollvali
 ## Zeitlimits und sichere Wiederaufnahme
 
 Der [PROVOWARE-Zeitlimitstandard](docs/PROVOWARE_TIMEOUT_STANDARD.md) legt eine abgestufte Überwachung fest. Die bereits vorhandenen CI-Obergrenzen bleiben unverändert. Keine unkontrollierten Wiederholungen oder Dateneingriffe bei Stillstand. Eine beschriebene Regel ist noch kein Nachweis einer vollständig eingebauten technischen Überwachung.
+
+## Wartung des Dateiöffnens – 02.11.2026
+
+Das Rust-Plugin `tauri-plugin-opener` wurde mit [PR #91](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/91) von **2.5.5 auf 2.7.2** aktualisiert (Merge-Commit `32e7e015ecdd`). Die beiden PR-Prüfabläufe **Quality** (Rust, Frontend, 768×512-Referenz) und **Autonomous Hardening** waren auf dem geprüften Quell-Commit `3fd5fb2bfc97` erfolgreich. Die Aktualisierung enthält laut vorgelagertem Projekt eine Linux-Korrektur für einen möglichen Laufzeitfehler beim Öffnen; eine eigene Reproduktion dieses Fehlers oder eine reale Kubuntu-Endabnahme ist damit **nicht** nachgewiesen. Ein entsprechendes JavaScript-Öffnen-Plugin ist in `package.json` nicht installiert; das Rust-Plugin wird im Rust-Kern verwendet.
+
+Die weiteren automatischen Aktualisierungen [#89](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/89) (Store) und [#90](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/90) (Tauri-Kern) bleiben bis zur Prüfung der zusammengehörigen Rust-/JavaScript-Versionen separat offen. Diese Wartung bedeutet **keine Release- oder Nutzer-Endfreigabe**.

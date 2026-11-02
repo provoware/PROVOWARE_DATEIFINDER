@@ -40,3 +40,7 @@
 [x] Abhängigkeitsüberwachung – Dependabot prüft wöchentlich npm, Cargo und GitHub-Actions.
 
 [ ] 2026-11-02 | P1 · NI-20261102-02 | Laufzeit-Wächter für Browser-, Rust- und Dateiaktionen prüfen und fehlende Zeitlimits ergänzen | prüfen: Stillstand/Timeouterkennung und Quellschutz | fertig wenn: technische Negativtests bestanden; die Regel allein genügt nicht.
+
+[x] 2026-11-02 | P1 · Abhängigkeiten | Rust-Dateiöffnen-Plugin 2.5.5 → 2.7.2 über PR #91 nach main übernommen | prüfen: Quality #41395807814 und Hardening #41395807906 auf PR-HEAD 3fd5fb2 erfolgreich, Merge-Commit 32e7e015ecdd | fertig wenn: GitHub-Merge bestätigt und Versionsstand in Cargo.toml/Cargo.lock nachvollziehbar.
+[x] 2026-11-02 | P1 · Hauptzweigprüfung | main nach PR #91 erneut vollständig kontrolliert | prüfen: Push-Quality #41396487704 auf main-Commit 32e7e015ecdd20dd6479752e8b7de3d6b1ca41d9 abgeschlossen mit SUCCESS; echte Kubuntu-Endabnahme bleibt separat OFFEN | fertig wenn: vollständiger Quality-Lauf auf genau diesem main-Commit erfolgreich und Ergebnis dokumentiert (erfüllt).
+[ ] 2026-11-02 | P1 · Abhängigkeiten | PR #89 (Store) und #90 (Tauri) nur nach Rust-/JavaScript-Kompatibilitätsprüfung integrieren | prüfen: Cargo.toml/Cargo.lock, package.json/package-lock.json, Capabilities, Frontend/Rust/Hardening auf jeweiligem neuen HEAD | fertig wenn: Versionen und Schnittstellen abgestimmt, alle Pflichtprüfungen erfolgreich, Merge-Gates erfüllt.
