@@ -50,3 +50,7 @@
 
 
 [ ] 2026-11-10 | P1 · QA-BUNDLE-93 | Bestehenden Draft #93 als konsolidierten Test-/Starter-Sicherheitsentwurf aus #84 (npm ci nur mit Lockfile), #85 (Auswahltests in Hardening) und #93 (lokaler vollständiger Node-Testlauf) bewerten | REQUIRES: vollständige neue Quality/Hardening-Gates auf demselben konsolidierten HEAD, sichere Negativtests, nachvollziehbare README-Evidence | SUPERSEDES: erst nach Prüfung die bisherigen #84/#85 als ersetzt kennzeichnen, ohne Änderungen zu verlieren; kein Draft-/Release-Merge nach main. Zielsystem-/Nutzer-Endabnahme bleibt letzter Schritt.
+
+
+[x] 2026-11-10 | P1 · QA-BUNDLE-93 · KONSOLIDIERUNG ABGESCHLOSSEN | Die Entwürfe #84 (sicheres npm ci) und #85 (Auswahl-CI-Gate) sind nach vollständigem Integrationsnachweis im konsolidierten Draft #93 auf SHA 00c0ef1519c7f02a6c34db4436aa5c1ab0f67e17 als SUPERSEDED geschlossen (ohne Merge) | prüfen: exakt gleiche Starter-/Startertest-/Workflow-Blobs, zusätzlich vereinte Source-Contracts, sämtliche vier GitHub-Checks SUCCESS auf SHA 00c0ef1519c7f02a6c34db4436aa5c1ab0f67e17 | Ergebnis: Rückstand von 11 auf 9 offene Entwürfe reduziert, main unverändert.
+[ ] 2026-11-10 | P1 · QA-BUNDLE-93 · FREIGABE OFFEN | Den konsolidierten Entwurf #93 erst nach aktueller PR-CI, Freigabevertrag und kontrollierter Integration als main-Abschluss werten | keine automatische Draft-Freigabe oder Umgehung der Release-/Kubuntu-Endabnahme; ebenfalls noch offen: übrige 8 Entwürfe.

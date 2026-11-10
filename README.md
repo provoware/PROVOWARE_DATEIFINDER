@@ -302,3 +302,11 @@ Im bestehenden PR #93 werden die Änderungen aus den bisherigen Entwürfen **#84
 Vorbereitung: Ursprungsdateien seit ihren damaligen Basis-Commits unverändert, daher inhaltlich konfliktfrei mit dem aktuellen `main` kombinierbar. **Erneute Quality/Hardening-CI auf exakt diesem konsolidierten Commit ist Pflicht.** Bisherige ältere CI-Ergebnisse gelten nicht als neuer PASS.
 
 Entwürfe #84/#85 werden erst bei nachgewiesener inhaltlicher Gleichwertigkeit und erfolgreicher Gesamt-CI als ersetzt gekennzeichnet. Bis zur gesonderten Freigabe bleiben alle Änderungen in einem Entwicklungszweig. Kubuntu-Endabnahme und Lizenz-/Releaseentscheidung weiterhin offen.
+
+
+### ✅ Nachprüfung: ersetzt statt unkontrolliert gemergt (10.11.2026)
+
+- Auf konsolidiertem Commit `00c0ef1519c7f02a6c34db4436aa5c1ab0f67e17`: GitHub-Quality (Frontend, Rust, Golden Reference) und Autonomous-Hardening **4/4 SUCCESS**; sämtliche Änderungen aus #84/#85 wurden auf Blob-/Testebene vollständig nachgewiesen.
+- Die alten Entwürfe **#84 und #85 sind geschlossen (SUPERSEDED), ungemergt**. Ihr Code und die neuen Schutztests liegen gesammelt in **#93**, der weiterhin ausdrücklich ein **Entwurf** bleibt.
+- Aktuell **9 offene PRs**, alle Entwürfe: **#79, #80, #81, #82, #83, #88, #93, #94, #95** (zuvor 11). Keine Funktion aus #93 wurde nach `main` übernommen.
+- Dieser Dokumentationsnachtrag besitzt einen eigenen neuen Commit und benötigt **erneut** passende GitHub-CI, bevor er als vollständig geprüft gelten kann. Kein Stable-Release, keine Nutzer-Endabnahme.
