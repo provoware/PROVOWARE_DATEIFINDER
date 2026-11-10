@@ -72,6 +72,7 @@ jobs:
         run: |
           node --test tests/hardening/source-contracts.mjs
           node --test tests/playwright-config-contracts.mjs
+          node --experimental-strip-types --test tests/result-selection.test.mjs
           npm run typecheck
 
       - name: TIEF - build fmt clippy and complete Rust suite

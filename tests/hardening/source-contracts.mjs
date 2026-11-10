@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validActionName } from "../../src/file-action-names.ts";
+import "./verify-behavior.mjs";
 
 const [frontend, rust, fileActions, css, tauriConfig, qualityWorkflow, hardeningWorkflow, dependabot] = await Promise.all([
   readFile("src/main.ts", "utf8"),
@@ -176,6 +177,18 @@ test("hardening executes the complete UI suite and dependency caches stay enable
   assert.match(hardeningWorkflow, /cache:\s*npm/u);
   assert.match(qualityWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
   assert.match(hardeningWorkflow, /actions\/cache@caa296126883cff596d87d8935842f9db880ef25/u);
+});
+
+test("local verify script executes all Node regressions and fails closed", async () => {
+  const script = await readFile("verify.sh", "utf8");
+  assert.match(script, /^set -Eeuo pipefail$/mu);
+  assert.match(script, /^node --test tests\/hardening\/source-contracts\.mjs$/mu);
+  assert.match(script, /^node --experimental-strip-types --test tests\/\*\.mjs$/mu);
+  assert.match(script, /^cargo test --locked --manifest-path src-tauri\/Cargo\.toml$/mu);
+});
+
+test("hardening runs selection regressions for virtualized result lists", () => {
+  assert.match(hardeningWorkflow, /node --experimental-strip-types --test tests\/result-selection\.test\.mjs/u);
 });
 
 test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
