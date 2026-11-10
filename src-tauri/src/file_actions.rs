@@ -137,6 +137,11 @@ pub(crate) fn valid_name(name: &str) -> bool {
                 || matches!(character, '\u{061c}' | '\u{200e}' | '\u{200f}')
                 || ('\u{2028}'..='\u{202e}').contains(&character)
                 || ('\u{2066}'..='\u{206f}').contains(&character)
+                || ('\u{2060}'..='\u{2065}').contains(&character)
+                || matches!(
+                    character,
+                    '\u{00ad}' | '\u{034f}' | '\u{180e}' | '\u{200b}' | '\u{feff}'
+                )
                 || matches!(
                     character,
                     '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
@@ -803,6 +808,19 @@ mod tests {
         for character in controls.chars() {
             assert!(!valid_name(&format!("archiv{character}2026.zip")));
         }
+        assert!(valid_name("Büro 🧑‍💻.zip"));
+    }
+
+    #[test]
+    fn file_action_names_reject_invisible_formatting_characters() {
+        let invisible = concat!(
+            "\u{00ad}\u{034f}\u{180e}\u{200b}",
+            "\u{2060}\u{2061}\u{2062}\u{2063}\u{2064}\u{2065}\u{feff}",
+        );
+        for character in invisible.chars() {
+            assert!(!valid_name(&format!("Archiv{character}2026.zip")));
+        }
+        // Sichtbare Namen und Emoji-Verbindungen bleiben erlaubt.
         assert!(valid_name("Büro 🧑‍💻.zip"));
     }
 
