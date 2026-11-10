@@ -187,6 +187,10 @@ test("local verify script executes all Node regressions and fails closed", async
   assert.match(script, /^cargo test --locked --manifest-path src-tauri\/Cargo\.toml$/mu);
 });
 
+test("hardening runs selection regressions for virtualized result lists", () => {
+  assert.match(hardeningWorkflow, /node --experimental-strip-types --test tests\/result-selection\.test\.mjs/u);
+});
+
 test("weekly dependency monitoring covers npm Cargo and GitHub Actions", () => {
   assert.match(dependabot, /package-ecosystem:\s*npm/u);
   assert.match(dependabot, /package-ecosystem:\s*cargo/u);

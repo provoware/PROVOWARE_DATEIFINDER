@@ -89,8 +89,6 @@ Lokale Dateinamen schnell durchsuchen – **Tauri 2 + Vanilla TypeScript + HTML/
 
 ## Schnellstart
 
-**Entwickler-Prüfung:** `./verify.sh` prüft die Quellverträge, alle vorhandenen Node-Regressionsprüfungen (`tests/*.mjs`), den Frontend-Build sowie Rust-Formatierung, Clippy und Rust-Tests. Bei einem Fehler endet der Lauf ohne grüne Abschlussmeldung. Die Prüfkette selbst wird in der GitHub-Hardening-Prüfung mit isolierten Befehls-Doppelgängern auf vollständige Testauswahl und sicheren Abbruch bei Fehlern jeder der sechs Prüfaktionen (Node, npm und Cargo) getestet. Browser-/Referenzbildprüfungen und die reale Kubuntu-Endabnahme bleiben separate Schritte. Für `./verify.sh` ist Node.js ab 22.6 mit eingebauter TypeScript-Unterstützung nötig; der normale Programmstart bleibt laut `package.json` ab Node.js 20.19 möglich. Bei fehlender Unterstützung bricht die Prüfung vor dem ersten Test verständlich ab.
-
 Voraussetzungen: Node.js >= 20.19, Rust >= 1.90 und die Tauri-Systempakete für das jeweilige Betriebssystem.
 
 ### Empfohlen: Linux Mint, Kubuntu und Ubuntu
@@ -265,4 +263,42 @@ Der [PROVOWARE-Zeitlimitstandard](docs/PROVOWARE_TIMEOUT_STANDARD.md) legt eine 
 
 Das Rust-Plugin `tauri-plugin-opener` wurde mit [PR #91](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/91) von **2.5.5 auf 2.7.2** aktualisiert (Merge-Commit `32e7e015ecdd`). Die beiden PR-Prüfabläufe **Quality** (Rust, Frontend, 768×512-Referenz) und **Autonomous Hardening** waren auf dem geprüften Quell-Commit `3fd5fb2bfc97` erfolgreich. Die Aktualisierung enthält laut vorgelagertem Projekt eine Linux-Korrektur für einen möglichen Laufzeitfehler beim Öffnen; eine eigene Reproduktion dieses Fehlers oder eine reale Kubuntu-Endabnahme ist damit **nicht** nachgewiesen. Ein entsprechendes JavaScript-Öffnen-Plugin ist in `package.json` nicht installiert; das Rust-Plugin wird im Rust-Kern verwendet.
 
-Die weiteren automatischen Aktualisierungen [#89](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/89) (Store) und [#90](https://github.com/provoware/PROVOWARE_DATEIFINDER/pull/90) (Tauri-Kern) bleiben bis zur Prüfung der zusammengehörigen Rust-/JavaScript-Versionen separat offen. Diese Wartung bedeutet **keine Release- oder Nutzer-Endfreigabe**.
+**Historischer Stand vom 02.11.2026:** Die damaligen PRs #89 und #90 waren noch offen. Beide wurden am 10.11.2026 nach Versionsabgleich und aktualisierter CI integriert; siehe den folgenden aktuellen Integrationsstand. **Keine Release- oder Nutzer-Endfreigabe.**
+
+<!-- PROVOWARE_PR_INTEGRATION_2026_11_10 -->
+## 🔄 Integrationsstand 10.11.2026 – Entwicklungszweig `main`
+
+| PR | Änderung | Merge-Commit | Nachweis |
+|---|---|---|---|
+| #96 | Vite 8.3.5 → 8.3.6 | `d8d18b04591c7061c1497bca82fb17c558dcda11` | 4/4 PR-Checks, anschließend main-Qualität grün |
+| #97 | Playwright 1.64.1 → 1.65.0 | `57fb9af8d11825d1362b245210e1aa62b69377c8` | Nach automatischer Neubasierung 4/4 PR-Checks; main-Qualität grün |
+| #90 | Tauri Rust 2.12.4 → 2.12.5 | `87fd80e99852c6ff5e44fd3bada9dab094c21679` | 4/4 PR-Checks; Frontend/Rust/Golden auf main grün |
+| #89 | Store Rust **und** JavaScript 2.4.5 → 2.5.0 | `4e250418bd1a0943e87ea216a9013807c68f87e6` | korrigierter PR-HEAD `ab7ebf7`, 4/4 PR-Checks; Frontend/Rust/Golden auf main grün |
+
+### ✅ Abhängigkeits- und Rechtevertrag
+
+- **Tauri-Kern:** `tauri` (Rust) = 2.12.5; `@tauri-apps/api` und `@tauri-apps/cli` = 2.12.4. Die Minor-Version **2.12** ist abgestimmt; Tauri v2 fordert für den Kern gleiche Minor-Version.
+- **Store-Plugin:** `tauri-plugin-store` (Rust) = **2.5.0**, `@tauri-apps/plugin-store` (npm) = **2.5.0**. Exakte Versionen in `Cargo.toml`, `Cargo.lock`, `package.json` und `package-lock.json` synchronisiert.
+- Die Freigabebereiche in `src-tauri/capabilities/desktop.json` und `mobile.json` bleiben unverändert; keine pauschalen Dateisystemrechte.
+- Die ursprüngliche JavaScript-Plugin-Abweichung von PR #89 wurde **im bestehenden PR** und ohne zusätzlichen PR bereinigt.
+
+### 📋 Offene Arbeit
+
+**Nach den vier Merges verbleiben 11 PRs, sämtlich als Draft:** #79, #80, #81, #82, #83, #84, #85, #88, #93, #94, #95. Diese werden nicht automatisch integriert; Änderungen an gemeinsamen Workflows, Source-Contracts, README/TODO und Such-/Exportmodulen müssen vor neuer Freigabe koordiniert werden.
+
+> 🟠 **Kein Stable-Release:** reale Kubuntu-Endprüfung, Lizenzentscheidung und finale Nutzer-Endabnahme bleiben ausdrücklich offen. Der Nutzer nimmt erst den vollständig geprüften, eingefrorenen Abschlussstand ab. CI-Nachweise gelten nur für den jeweils benannten Commit; Dokumentations-Commit benötigt eigenen Push-Quality-Nachweis.
+
+
+<!-- QA_BUNDLE_DRAFT_93_20261110 -->
+### 🟠 Konsolidierter QA- und Starter-Sicherheitsentwurf #93 · 10.11.2026
+
+**Nur PR-Entwurf; nicht in `main` integriert, keine Releasefreigabe.**
+Im bestehenden PR #93 werden die Änderungen aus den bisherigen Entwürfen **#84** und **#85** zusammengeführt, ohne neuen PR:
+
+- **#84 – npm-Reparatur:** Erstinstallation und Fehlerreparatur verwenden ausschließlich `npm ci --ignore-scripts --no-audit --no-fund`; ohne `package-lock.json` sicherer Abbruch. Die Zustimmung des Nutzers bleibt erforderlich; Negativtests sichern Fehlerpfade.
+- **#85 – Hardening:** Die vorhandenen Auswahl-Regressionen `tests/result-selection.test.mjs` laufen zusätzlich verbindlich in der GitHub-Hardening-CI. Ein Quellvertrag schützt diesen Aufruf.
+- **#93 – lokale Verifikation:** `verify.sh` führt sämtliche Node-Regressionen `tests/*.mjs` und vorhandene Rust-Prüfungen aus. Isolierte Befehls-Doppelgänger testen den kontrollierten Abbruch ohne falschen Erfolg.
+
+Vorbereitung: Ursprungsdateien seit ihren damaligen Basis-Commits unverändert, daher inhaltlich konfliktfrei mit dem aktuellen `main` kombinierbar. **Erneute Quality/Hardening-CI auf exakt diesem konsolidierten Commit ist Pflicht.** Bisherige ältere CI-Ergebnisse gelten nicht als neuer PASS.
+
+Entwürfe #84/#85 werden erst bei nachgewiesener inhaltlicher Gleichwertigkeit und erfolgreicher Gesamt-CI als ersetzt gekennzeichnet. Bis zur gesonderten Freigabe bleiben alle Änderungen in einem Entwicklungszweig. Kubuntu-Endabnahme und Lizenz-/Releaseentscheidung weiterhin offen.
