@@ -2,6 +2,8 @@
 
 # Priorisierte Aufgaben und Prüfnachweise – 01.11.2026
 
+[ ] 2026-11-02 | P2 · Testrobustheit | Zeitzonen-Unterprozess der Trefferstatistik mit 30-s-Grenze und ETIMEDOUT-Negativtest absichern | prüfen: isolierter Node-Test 2/2 bestanden; GitHub Quality und Hardening auf PR-HEAD noch ausstehend | fertig wenn: beide GitHub-Prüfabläufe auf finalem Commit erfolgreich und keine falsche Erfolgsmeldung bei Timeout.
+
 [x] 2026-11-01 | P0 · Sicherheit | Unicode-Richtungssteuerzeichen im TXT-Export als sichtbare Zeichenfolgen ausgeben | prüfen: PR #74, CI Frontend/Rust/Golden und Hardening erfolgreich, main-Merge a237386370b3 | fertig wenn: Merge bestätigt, ursprüngliche Dateien unberührt.
 [ ] 2026-11-01 | P1 · Freigabe | Aktuellen main-Stand nach Dokumentationspflege erneut vollständig prüfen | prüfen: GitHub-Qualitätsprüfungen am endgültigen Commit und Desktop-Start | fertig wenn: alle erforderlichen Tests auf derselben Revision erfolgreich, verbleibende Grenzen dokumentiert.
 [ ] 2026-11-01 | P1 · Lizenz | Lizenzentscheidung und nachzuweisende Weitergaberechte abschließen | prüfen: tatsächlicher Lizenztext und betroffene Fremdkomponenten | fertig wenn: rechtsklarer dokumentierter Freigabestatus.

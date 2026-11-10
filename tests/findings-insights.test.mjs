@@ -7,6 +7,13 @@ const MIB = 1024 * 1024;
 const file = (kind, sizeBytes, modifiedAt) => ({ kind, sizeBytes, modifiedAt });
 const counts = (groups) => Object.fromEntries(groups.map((group) => [group.label, group.count]));
 
+// Separate Node processes must never stall the regression suite indefinitely.
+function runTimezoneChild(script, timeZone, timeoutMs = 30_000) {
+  return spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {
+    encoding: "utf8", env: { ...process.env, TZ: timeZone }, timeout: timeoutMs,
+  });
+}
+
 test("type overview uses the same four kinds as colored result rows", () => {
   const stats = createFindingsStats();
   addFindingsBatch(stats, [
@@ -70,10 +77,8 @@ test("year overview follows the local calendar year shown in file details", () =
     process.stdout.write(JSON.stringify(insightGroups(stats, "year").map((group) => group.label)));
   `;
   for (const [timeZone, expectedYear] of [["America/Los_Angeles", "2025"], ["Europe/Berlin", "2026"]]) {
-    const child = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {
-      encoding: "utf8",
-      env: { ...process.env, TZ: timeZone },
-    });
+    const child = runTimezoneChild(script, timeZone);
+    assert.equal(child.error, undefined, child.error?.message);
     assert.equal(child.status, 0, child.stderr);
     assert.deepEqual(JSON.parse(child.stdout), [expectedYear], timeZone);
   }
@@ -91,4 +96,11 @@ test("size aggregation rejects malformed sizes and cannot overflow", () => {
   assert.equal(stats.total, 5);
   assert.equal(stats.totalBytes, Number.MAX_SAFE_INTEGER);
   assert.equal(counts(insightGroups(stats, "size")).Unbekannt, 2);
+});
+
+
+test("timezone child process timeout fails closed instead of hanging the suite", () => {
+  const child = runTimezoneChild("setInterval(() => {}, 1000)", "Europe/Berlin", 250);
+  assert.equal(child.error?.code, "ETIMEDOUT");
+  assert.notEqual(child.status, 0);
 });
