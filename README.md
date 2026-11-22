@@ -287,3 +287,26 @@ Das Rust-Plugin `tauri-plugin-opener` wurde mit [PR #91](https://github.com/prov
 **Nach den vier Merges verbleiben 11 PRs, sämtlich als Draft:** #79, #80, #81, #82, #83, #84, #85, #88, #93, #94, #95. Diese werden nicht automatisch integriert; Änderungen an gemeinsamen Workflows, Source-Contracts, README/TODO und Such-/Exportmodulen müssen vor neuer Freigabe koordiniert werden.
 
 > 🟠 **Kein Stable-Release:** reale Kubuntu-Endprüfung, Lizenzentscheidung und finale Nutzer-Endabnahme bleiben ausdrücklich offen. Der Nutzer nimmt erst den vollständig geprüften, eingefrorenen Abschlussstand ab. CI-Nachweise gelten nur für den jeweils benannten Commit; Dokumentations-Commit benötigt eigenen Push-Quality-Nachweis.
+
+
+<!-- QA_BUNDLE_DRAFT_93_20261110 -->
+### 🟠 Konsolidierter QA- und Starter-Sicherheitsentwurf #93 · 10.11.2026
+
+**Nur PR-Entwurf; nicht in `main` integriert, keine Releasefreigabe.**
+Im bestehenden PR #93 werden die Änderungen aus den bisherigen Entwürfen **#84** und **#85** zusammengeführt, ohne neuen PR:
+
+- **#84 – npm-Reparatur:** Erstinstallation und Fehlerreparatur verwenden ausschließlich `npm ci --ignore-scripts --no-audit --no-fund`; ohne `package-lock.json` sicherer Abbruch. Die Zustimmung des Nutzers bleibt erforderlich; Negativtests sichern Fehlerpfade.
+- **#85 – Hardening:** Die vorhandenen Auswahl-Regressionen `tests/result-selection.test.mjs` laufen zusätzlich verbindlich in der GitHub-Hardening-CI. Ein Quellvertrag schützt diesen Aufruf.
+- **#93 – lokale Verifikation:** `verify.sh` führt sämtliche Node-Regressionen `tests/*.mjs` und vorhandene Rust-Prüfungen aus. Isolierte Befehls-Doppelgänger testen den kontrollierten Abbruch ohne falschen Erfolg.
+
+Vorbereitung: Ursprungsdateien seit ihren damaligen Basis-Commits unverändert, daher inhaltlich konfliktfrei mit dem aktuellen `main` kombinierbar. **Erneute Quality/Hardening-CI auf exakt diesem konsolidierten Commit ist Pflicht.** Bisherige ältere CI-Ergebnisse gelten nicht als neuer PASS.
+
+Entwürfe #84/#85 werden erst bei nachgewiesener inhaltlicher Gleichwertigkeit und erfolgreicher Gesamt-CI als ersetzt gekennzeichnet. Bis zur gesonderten Freigabe bleiben alle Änderungen in einem Entwicklungszweig. Kubuntu-Endabnahme und Lizenz-/Releaseentscheidung weiterhin offen.
+
+
+### ✅ Nachprüfung: ersetzt statt unkontrolliert gemergt (10.11.2026)
+
+- Auf konsolidiertem Commit `00c0ef1519c7f02a6c34db4436aa5c1ab0f67e17`: GitHub-Quality (Frontend, Rust, Golden Reference) und Autonomous-Hardening **4/4 SUCCESS**; sämtliche Änderungen aus #84/#85 wurden auf Blob-/Testebene vollständig nachgewiesen.
+- Die alten Entwürfe **#84 und #85 sind geschlossen (SUPERSEDED), ungemergt**. Ihr Code und die neuen Schutztests liegen gesammelt in **#93**, der weiterhin ausdrücklich ein **Entwurf** bleibt.
+- Aktuell **9 offene PRs**, alle Entwürfe: **#79, #80, #81, #82, #83, #88, #93, #94, #95** (zuvor 11). Keine Funktion aus #93 wurde nach `main` übernommen.
+- Dieser Dokumentationsnachtrag besitzt einen eigenen neuen Commit und benötigt **erneut** passende GitHub-CI, bevor er als vollständig geprüft gelten kann. Kein Stable-Release, keine Nutzer-Endabnahme.

@@ -40,7 +40,8 @@ function fixture({ project = true, cargo = true, modules = true, packages = true
 printf '%s\\n' "$*" >> "$MOCK_CALLS"
 case "$1" in
   --version) echo 11.0.0 ;;
-  ls) [[ "$MOCK_NPM_LS_FAIL" != 1 ]] ;;
+  ls) [[ "$MOCK_NPM_LS_FAIL" != 1 || -e "$MOCK_NPM_REPAIRED_MARKER" ]] ;;
+  ci) : > "$MOCK_NPM_REPAIRED_MARKER" ;;
   run)
     if [[ "$MOCK_APP_PORT_RACE" == 1 && ! -e "$MOCK_PORT_MARKER" ]]; then
       : > "$MOCK_PORT_MARKER"
@@ -91,6 +92,7 @@ if [[ "$1" == --version ]]; then echo 'cargo 1.98.1'; else echo '{}'; fi
     MOCK_CALLS: calls,
     MOCK_PACKAGES_INSTALLED: packages ? '1' : '0',
     MOCK_NPM_LS_FAIL: npmLsFails ? '1' : '0',
+    MOCK_NPM_REPAIRED_MARKER: join(directory, 'npm-repaired.marker'),
     MOCK_APP_FAIL: appFails ? '1' : '0',
     MOCK_APP_PORT_RACE: '0',
     MOCK_PORT_WITHOUT_OWNER: '0',
@@ -205,6 +207,28 @@ test('Erstinstallation mit --yes nutzt npm ci und startet', () => {
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(f.callsText(), /^ci --ignore-scripts --no-audit --no-fund$/m);
     assert.match(f.callsText(), /run tauri -- dev/);
+  } finally { f.cleanup(); }
+});
+
+test('Defekte npm-Abhängigkeiten werden nur mit der festen Paketliste repariert', () => {
+  const f = fixture({ npmLsFails: true });
+  try {
+    writeFileSync(join(f.directory, 'package-lock.json'), '{}\n');
+    const result = f.run(['--yes']);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(f.callsText(), /^ci --ignore-scripts --no-audit --no-fund$/m);
+    assert.doesNotMatch(f.callsText(), /^install(?: |$)/m);
+    assert.match(f.callsText(), /run tauri -- dev/);
+  } finally { f.cleanup(); }
+});
+
+test('Defekte npm-Abhängigkeiten ohne Paketliste lösen keine Installation aus', () => {
+  const f = fixture({ npmLsFails: true });
+  try {
+    const result = f.run(['--yes']);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /package-lock\.json fehlt/);
+    assert.doesNotMatch(f.callsText(), /^(?:ci|install)(?: |$)|run tauri/m);
   } finally { f.cleanup(); }
 });
 
