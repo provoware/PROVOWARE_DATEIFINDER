@@ -43,6 +43,9 @@ jobs:
       - name: Finding statistics aggregation contracts
         run: node --experimental-strip-types --test tests/date-format.test.mjs tests/findings-insights.test.mjs tests/preferences.test.mjs
 
+      - name: File action name validation contracts
+        run: node --experimental-strip-types --test tests/file-action-names.test.mjs
+
       - name: TypeScript gate
         run: npm run typecheck
 
