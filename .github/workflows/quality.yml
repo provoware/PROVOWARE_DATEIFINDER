@@ -41,7 +41,7 @@ jobs:
         run: node --test tests/start-contracts.mjs
 
       - name: Finding statistics aggregation contracts
-        run: node --experimental-strip-types --test tests/date-format.test.mjs tests/findings-insights.test.mjs tests/preferences.test.mjs
+        run: node --experimental-strip-types --test tests/date-format.test.mjs tests/export-lines.test.mjs tests/findings-insights.test.mjs tests/preferences.test.mjs
 
       - name: TypeScript gate
         run: npm run typecheck
