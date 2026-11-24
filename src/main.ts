@@ -6,7 +6,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { addFindingsBatch, createFindingsStats, insightGroups, type InsightMode } from "./findings-insights";
 import { formatDate } from "./date-format";
-import { MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent, normalizeZoom, parsePresets, type SearchPreset } from "./preferences";
+import { MAX_PRESETS, isSearchQueryWithinTokenLimit, isValidPresetContent, normalizeZoom, parsePresets, presetNameKey, type SearchPreset } from "./preferences";
 import { isSearchQueryWithinByteLimit } from "./search-query";
 import { validActionName } from "./file-action-names";
 import { formatExportLine } from "./export-lines";
@@ -1508,7 +1508,7 @@ async function initialize(): Promise<void> {
       ui.presetFeedback.textContent = "Bitte gültige Suchwörter (maximal 64) und einen Namen ohne Steuerzeichen (maximal 48 Zeichen) eingeben.";
       return;
     }
-    const existing = searchPresets.findIndex((preset) => preset.name.toLocaleLowerCase("de-DE") === name.toLocaleLowerCase("de-DE"));
+    const existing = searchPresets.findIndex((preset) => presetNameKey(preset.name) === presetNameKey(name));
     if (existing < 0 && searchPresets.length >= MAX_PRESETS) {
       ui.presetFeedback.textContent = `Maximal ${MAX_PRESETS} Vorlagen. Bitte eine alte Vorlage entfernen.`;
       return;
@@ -1556,8 +1556,8 @@ async function initialize(): Promise<void> {
         ui.presetFeedback.textContent = "Diese Datei enthält keine gültigen Suchvorlagen.";
         return;
       }
-      const existing = new Set(searchPresets.map((preset) => preset.name.toLocaleLowerCase("de-DE")));
-      const additions = parsed.filter((preset) => !existing.has(preset.name.toLocaleLowerCase("de-DE")))
+      const existing = new Set(searchPresets.map((preset) => presetNameKey(preset.name)));
+      const additions = parsed.filter((preset) => !existing.has(presetNameKey(preset.name)))
         .slice(0, MAX_PRESETS - searchPresets.length);
       if (!additions.length) {
         ui.presetFeedback.textContent = "Keine neuen Vorlagen. Gleiche Namen werden nicht überschrieben.";

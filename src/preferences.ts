@@ -16,6 +16,11 @@ const FILE_KINDS: SavedFileKind[] = ["image", "document", "audio", "text"];
 // Unsichtbare Zeilen- und Schreibrichtungszeichen dürfen Vorlagen nicht optisch verfälschen.
 const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028-\u202e\u2066-\u206f]/;
 
+// Unicode-Normalisierung verhindert optisch identische doppelte Vorlagennamen.
+export function presetNameKey(name: string): string {
+  return name.normalize("NFC").toLocaleLowerCase("de-DE");
+}
+
 // Gleiche Prüfung beim Speichern und beim erneuten Laden von Suchvorlagen.
 export function isValidPresetContent(name: string, query: string): boolean {
   return name.length > 0 && name.length <= 48 && query.length > 0
@@ -37,7 +42,7 @@ export function parsePresets(value: unknown): SearchPreset[] {
     const name = typeof item.name === "string" ? item.name.trim() : "";
     const query = typeof item.query === "string" ? item.query.trim() : "";
     if (!isValidPresetContent(name, query) || query.length > 4096 || new TextEncoder().encode(query).length > 4096 || !isSearchQueryWithinTokenLimit(query)) continue;
-    const key = name.toLocaleLowerCase("de-DE");
+    const key = presetNameKey(name);
     if (seen.has(key)) continue;
     if (item.matchMode !== "all" && item.matchMode !== "any") continue;
     if (!Array.isArray(item.fileTypes) || item.fileTypes.length > FILE_KINDS.length) continue;
